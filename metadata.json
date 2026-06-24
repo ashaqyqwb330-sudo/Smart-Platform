@@ -1,0 +1,8 @@
+{
+  "name": "المساعد الذكي الذهبي",
+  "description": "An advanced Android utility for automated clipboard monitoring, file management, and AI-driven task execution via a background service.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
