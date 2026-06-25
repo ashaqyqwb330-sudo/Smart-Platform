@@ -75,6 +75,15 @@ fun QuickActionsHubScreen(onNavigateBack: () -> Unit) {
     var applyBuildPackOverwrite by remember {
         mutableStateOf(prefs.getBoolean("action_apply_build_pack_overwrite", true))
     }
+    var accessShareSheetEnabled by remember {
+        mutableStateOf(prefs.getBoolean("access_share_sheet_enabled", true))
+    }
+    var accessOpenWithEnabled by remember {
+        mutableStateOf(prefs.getBoolean("access_open_with_enabled", true))
+    }
+    var accessQuickTileEnabled by remember {
+        mutableStateOf(prefs.getBoolean("access_quick_tile_enabled", true))
+    }
 
     // Expanded card tracker
     var expandedCard by remember { mutableStateOf<String?>(null) }
@@ -519,6 +528,107 @@ fun QuickActionsHubScreen(onNavigateBack: () -> Unit) {
                             } else {
                                 Text("📤 تصدير كامل المصدر الآن", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
+                        }
+                    }
+                }
+            }
+
+            // 8. Universal Access System Settings Card
+            item {
+                var isExpandedAccess by remember { mutableStateOf(false) }
+                ActionCard(
+                    title = "🌐 نظام الوصول الشامل (Universal Access)",
+                    description = "إدارة ظهور وتكامل التطبيق مع نظام أندرويد (قائمة المشاركة، الفتح باستخدام، والتبويبة السريعة).",
+                    isEnabled = true,
+                    onEnabledChange = { },
+                    isExpanded = isExpandedAccess,
+                    onToggleExpand = { isExpandedAccess = !isExpandedAccess },
+                    testTagPrefix = "universal_access"
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // 1. Share Sheet Toggle
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("قائمة المشاركة (Share Sheet)", color = TextSilver, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                Text("تفعيل ظهور التطبيق كخيار لمشاركة النصوص من التطبيقات الأخرى.", color = TextGray, fontSize = 9.sp)
+                            }
+                            Switch(
+                                checked = accessShareSheetEnabled,
+                                onCheckedChange = { isChecked ->
+                                    accessShareSheetEnabled = isChecked
+                                    prefs.edit().putBoolean("access_share_sheet_enabled", isChecked).apply()
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = SlateBg,
+                                    checkedTrackColor = MetallicGold,
+                                    uncheckedThumbColor = TextGray,
+                                    uncheckedTrackColor = GlassWhite
+                                ),
+                                modifier = Modifier.testTag("access_share_sheet_switch")
+                            )
+                        }
+
+                        Divider(color = GlassBorder.copy(alpha = 0.1f), thickness = 0.5.dp)
+
+                        // 2. Open With Toggle
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("الفتح باستخدام (Open With)", color = TextSilver, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                Text("تفعيل فتح وقراءة ملفات الكود والبرمجة عبر محرر ومحرك التطبيق.", color = TextGray, fontSize = 9.sp)
+                            }
+                            Switch(
+                                checked = accessOpenWithEnabled,
+                                onCheckedChange = { isChecked ->
+                                    accessOpenWithEnabled = isChecked
+                                    prefs.edit().putBoolean("access_open_with_enabled", isChecked).apply()
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = SlateBg,
+                                    checkedTrackColor = MetallicGold,
+                                    uncheckedThumbColor = TextGray,
+                                    uncheckedTrackColor = GlassWhite
+                                ),
+                                modifier = Modifier.testTag("access_open_with_switch")
+                            )
+                        }
+
+                        Divider(color = GlassBorder.copy(alpha = 0.1f), thickness = 0.5.dp)
+
+                        // 3. Quick Tile Toggle
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("أداة الضبط السريع (Quick Tile)", color = TextSilver, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                Text("تفعيل أيقونة لوحة الإشعارات لمعالجة محتوى الحافظة بنقرة واحدة.", color = TextGray, fontSize = 9.sp)
+                            }
+                            Switch(
+                                checked = accessQuickTileEnabled,
+                                onCheckedChange = { isChecked ->
+                                    accessQuickTileEnabled = isChecked
+                                    prefs.edit().putBoolean("access_quick_tile_enabled", isChecked).apply()
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = SlateBg,
+                                    checkedTrackColor = MetallicGold,
+                                    uncheckedThumbColor = TextGray,
+                                    uncheckedTrackColor = GlassWhite
+                                ),
+                                modifier = Modifier.testTag("access_quick_tile_switch")
+                            )
                         }
                     }
                 }
