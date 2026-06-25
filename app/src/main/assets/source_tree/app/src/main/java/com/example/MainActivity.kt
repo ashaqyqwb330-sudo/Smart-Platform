@@ -203,7 +203,6 @@ fun MainAppContent(
     var showAIPromptHub by remember { mutableStateOf(false) }
     var showQuickActionsHub by remember { mutableStateOf(false) }
     var showHelpCenter by remember { mutableStateOf(false) }
-    var showSourceExport by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     val sharedPrefs = remember(context) { context.getSharedPreferences("SmartPrefs", Context.MODE_PRIVATE) }
@@ -292,8 +291,6 @@ fun MainAppContent(
                     QuickActionsHubScreen(onNavigateBack = { showQuickActionsHub = false })
                 } else if (showHelpCenter) {
                     HelpCenterScreen(onNavigateBack = { showHelpCenter = false })
-                } else if (showSourceExport) {
-                    SourceExportScreen(onNavigateBack = { showSourceExport = false })
                 } else {
                     when (currentTab) {
                         MainTab.MONITOR -> MonitorScreen(viewModel)
@@ -308,8 +305,7 @@ fun MainAppContent(
                             onToggleGoldenFrame = onToggleSimulatedFrame,
                             onNavigateToAIPromptHub = { showAIPromptHub = true },
                             onNavigateToQuickActionsHub = { showQuickActionsHub = true },
-                            onNavigateToHelpCenter = { showHelpCenter = true },
-                            onNavigateToSourceExport = { showSourceExport = true }
+                            onNavigateToHelpCenter = { showHelpCenter = true }
                         )
                     }
                 }
@@ -4756,8 +4752,7 @@ fun SettingsScreen(
     onToggleGoldenFrame: (Boolean) -> Unit,
     onNavigateToAIPromptHub: () -> Unit,
     onNavigateToQuickActionsHub: () -> Unit,
-    onNavigateToHelpCenter: () -> Unit,
-    onNavigateToSourceExport: () -> Unit
+    onNavigateToHelpCenter: () -> Unit
 ) {
     var bPrefix by remember { mutableStateOf(viewModel.prefixBuilder.value) }
     var ePrefix by remember { mutableStateOf(viewModel.prefixExecutor.value) }
@@ -6761,15 +6756,6 @@ fun SettingsScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = MetallicGold.copy(alpha = 0.15f), contentColor = MetallicGold)
                     ) {
                         Text("📖 فتح مركز المساعدة والتوثيق", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = onNavigateToSourceExport,
-                        modifier = Modifier.fillMaxWidth().height(40.dp).testTag("open_source_export_button"),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MetallicGold, contentColor = SlateBg)
-                    ) {
-                        Text("📤 تصدير الكود المصدري كحزمة بناء", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }

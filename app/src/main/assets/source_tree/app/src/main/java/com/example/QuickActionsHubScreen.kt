@@ -1,16 +1,12 @@
 package com.example
 
 import android.content.Context
-import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -443,79 +439,6 @@ fun QuickActionsHubScreen(onNavigateBack: () -> Unit) {
                             ),
                             modifier = Modifier.testTag("apply_build_pack_overwrite_switch")
                         )
-                    }
-                }
-            }
-
-            // 7. Self-Export Source Code Card
-            item {
-                var isExportingLocal by remember { mutableStateOf(false) }
-                val scope = rememberCoroutineScope()
-                
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = CardSlateBg),
-                    border = BorderStroke(1.dp, GlassBorder),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "📤 التصدير الذاتي البرمجي",
-                                    color = BrightGold,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "قم بتصدير وتجميع كامل الكود المصدري للتطبيق كحزمة بناء جاهزة في الحافظة.",
-                                    color = TextGray,
-                                    fontSize = 10.sp,
-                                    lineHeight = 14.sp
-                                )
-                            }
-                        }
-                        
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        Button(
-                            onClick = {
-                                scope.launch {
-                                    isExportingLocal = true
-                                    delay(1000)
-                                    val res = SourceExporter.exportSourceToClipboard(context)
-                                    isExportingLocal = false
-                                    Toast.makeText(context, "✅ تم تجميع وتصدير ${res.first} ملفاً برمجياً للحافظة وحفظها بالمشروع!", Toast.LENGTH_LONG).show()
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(38.dp)
-                                .testTag("quick_action_export_source_button"),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MetallicGold,
-                                contentColor = SlateBg
-                            ),
-                            shape = RoundedCornerShape(6.dp),
-                            enabled = !isExportingLocal
-                        ) {
-                            if (isExportingLocal) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    color = SlateBg,
-                                    strokeWidth = 2.dp
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("جاري التجميع...", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            } else {
-                                Text("📤 تصدير كامل المصدر الآن", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
                     }
                 }
             }
