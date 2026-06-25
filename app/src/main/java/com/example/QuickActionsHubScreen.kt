@@ -490,7 +490,11 @@ fun QuickActionsHubScreen(onNavigateBack: () -> Unit) {
                                     delay(1000)
                                     val res = SourceExporter.exportSourceToClipboard(context)
                                     isExportingLocal = false
-                                    Toast.makeText(context, "✅ تم تجميع وتصدير ${res.first} ملفاً برمجياً للحافظة وحفظها بالمشروع!", Toast.LENGTH_LONG).show()
+                                    if (res.third) {
+                                        Toast.makeText(context, "✅ تم تجميع وتصدير ${res.first} ملفاً برمجياً للحافظة وحفظها بالمشروع!", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        Toast.makeText(context, "⚠️ الحزمة كبيرة جداً. تم حفظ الكود كملف فقط في مجلد المشروع!", Toast.LENGTH_LONG).show()
+                                    }
                                 }
                             },
                             modifier = Modifier

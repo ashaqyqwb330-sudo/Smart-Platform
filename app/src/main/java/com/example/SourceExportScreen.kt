@@ -38,7 +38,7 @@ fun SourceExportScreen(
     val scrollState = rememberScrollState()
 
     var isExporting by remember { mutableStateOf(false) }
-    var exportResult by remember { mutableStateOf<Pair<Int, String>?>(null) }
+    var exportResult by remember { mutableStateOf<Triple<Int, String, Boolean>?>(null) }
 
     Scaffold(
         topBar = {
@@ -121,7 +121,11 @@ fun SourceExportScreen(
                         val res = SourceExporter.exportSourceToClipboard(context)
                         exportResult = res
                         isExporting = false
-                        Toast.makeText(context, "✅ تم تصدير ${res.first} ملفاً للحافظة وحفظها بالمشروع!", Toast.LENGTH_LONG).show()
+                        if (res.third) {
+                            Toast.makeText(context, "✅ تم تصدير ${res.first} ملفاً للحافظة وحفظها بالمشروع!", Toast.LENGTH_LONG).show()
+                        } else {
+                            Toast.makeText(context, "⚠️ الحزمة كبيرة جداً. تم حفظ الكود كملف فقط في مجلد المشروع!", Toast.LENGTH_LONG).show()
+                        }
                     }
                 },
                 modifier = Modifier
@@ -184,10 +188,17 @@ fun SourceExportScreen(
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = "• إجمالي الملفات المصدرة والمفلترة: ${result.first} ملفاً برمجياً وتكوينياً حقيقياً.\n" +
-                                            "• حالة الحافظة: تم نسخ حزمة البناء بالكامل وتجهيزها للصق فوراً.\n" +
-                                            "• نسخة احتياطية: تم الحفظ كملف نصي منظم في مجلد المشروع:\n" +
-                                            "  `SmartInbox/Source_Export.txt`",
+                                    text = if (result.third) {
+                                        "• إجمالي الملفات المصدرة والمفلترة: ${result.first} ملفاً برمجياً وتكوينياً حقيقياً.\n" +
+                                        "• حالة الحافظة: تم نسخ حزمة البناء بالكامل وتجهيزها للصق فوراً.\n" +
+                                        "• نسخة احتياطية: تم الحفظ كملف نصي منظم في مجلد المشروع:\n" +
+                                        "  `SmartInbox/Source_Export.txt`"
+                                    } else {
+                                        "• إجمالي الملفات المصدرة والمفلترة: ${result.first} ملفاً برمجياً وتكوينياً حقيقياً.\n" +
+                                        "• حالة الحافظة: ⚠️ الحزمة كبيرة جداً (> 10MB)، تفادياً لتجميد الذاكرة لم يتم نسخها تلقائياً للحافظة.\n" +
+                                        "• نسخة احتياطية: تم الحفظ كملف نصي منظم بنجاح في مجلد المشروع:\n" +
+                                        "  `SmartInbox/Source_Export.txt`"
+                                    },
                                     color = TextSilver,
                                     fontSize = 11.sp,
                                     lineHeight = 17.sp
