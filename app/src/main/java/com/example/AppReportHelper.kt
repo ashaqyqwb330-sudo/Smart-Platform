@@ -12,8 +12,80 @@ import java.util.*
 
 object AppReportHelper {
 
-    fun generateInteractiveHtmlReport(logs: List<LogEntity>, editedMap: Map<Int, String>): String {
+    fun anonymizeText(text: String): String {
+        var result = text
+        // Anonymize API Keys (e.g. Google AI Studio keys matching AIzaSy[A-Za-z0-9_-]{35})
+        val geminiKeyRegex = Regex("AIzaSy[A-Za-z0-9_-]{35}")
+        result = result.replace(geminiKeyRegex, "AIzaSy*******************************")
+        
+        // Anonymize Emails (e.g. john.doe@gmail.com -> j***e@gmail.com)
+        val emailRegex = Regex("([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})")
+        result = result.replace(emailRegex) { matchResult ->
+            val username = matchResult.groupValues[1]
+            val domain = matchResult.groupValues[2]
+            if (username.length > 2) {
+                "${username.first()}***${username.last()}@$domain"
+            } else {
+                "***@$domain"
+            }
+        }
+        return result
+    }
+
+    fun generateInteractiveHtmlReport(
+        logs: List<LogEntity>, 
+        editedMap: Map<Int, String>,
+        theme: String = "dark",
+        includeDetails: Boolean = true,
+        anonymize: Boolean = false
+    ): String {
         val sb = java.lang.StringBuilder()
+        
+        val themeStyles = when (theme) {
+            "light" -> """
+                :root {
+                    --bg-slate: #f3f4f6;
+                    --card-bg: #ffffff;
+                    --border-gold: #d1d5db;
+                    --text-silver: #1f2937;
+                    --text-gray: #4b5563;
+                    --gold-glow: #3b82f6;
+                    --success-tint: rgba(16, 185, 129, 0.08);
+                    --success-text: #059669;
+                    --error-tint: rgba(239, 68, 68, 0.08);
+                    --error-text: #dc2626;
+                }
+            """
+            "gold" -> """
+                :root {
+                    --bg-slate: #120d02;
+                    --card-bg: #1c1507;
+                    --border-gold: #fbbf24;
+                    --text-silver: #fef08a;
+                    --text-gray: #ca8a04;
+                    --gold-glow: #fbbf24;
+                    --success-tint: rgba(16, 185, 129, 0.15);
+                    --success-text: #10b981;
+                    --error-tint: rgba(239, 68, 68, 0.15);
+                    --error-text: #ef4444;
+                }
+            """
+            else -> """
+                :root {
+                    --bg-slate: #0b0f19;
+                    --card-bg: #111827;
+                    --border-gold: #d97706;
+                    --text-silver: #e2e8f0;
+                    --text-gray: #94a3b8;
+                    --gold-glow: #f59e0b;
+                    --success-tint: rgba(16, 185, 129, 0.15);
+                    --success-text: #10b981;
+                    --error-tint: rgba(239, 68, 68, 0.15);
+                    --error-text: #ef4444;
+                }
+            """
+        }
+
         sb.append("""
             <!DOCTYPE html>
             <html lang="ar" dir="rtl">
@@ -22,18 +94,7 @@ object AppReportHelper {
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>تقرير سجل الأحداث التفاعلي - المراقب الذكي</title>
                 <style>
-                    :root {
-                        --bg-slate: #0b0f19;
-                        --card-bg: #111827;
-                        --border-gold: #d97706;
-                        --text-silver: #e2e8f0;
-                        --text-gray: #94a3b8;
-                        --gold-glow: #f59e0b;
-                        --success-tint: rgba(16, 185, 129, 0.15);
-                        --success-text: #10b981;
-                        --error-tint: rgba(239, 68, 68, 0.15);
-                        --error-text: #ef4444;
-                    }
+                    $themeStyles
                     body {
                         background-color: var(--bg-slate);
                         color: var(--text-silver);
@@ -234,8 +295,12 @@ object AppReportHelper {
         val nowStr = sdf.format(Date())
 
         for (log in logs) {
-            val detail = editedMap[log.id] ?: log.details ?: ""
-            val isFail = log.message.contains("❌") || log.message.contains("فشل") || detail.contains("❌") || detail.contains("فشل")
+            val rawDetail = editedMap[log.id] ?: log.details ?: ""
+            val detail = if (anonymize) anonymizeText(rawDetail) else rawDetail
+            val rawMsg = log.message
+            val msg = if (anonymize) anonymizeText(rawMsg) else rawMsg
+            
+            val isFail = msg.contains("❌") || msg.contains("فشل") || detail.contains("❌") || detail.contains("فشل")
             val rowClass = if (isFail) "row-error" else "row-success"
             
             val typeLabel = when (log.type) {
@@ -243,6 +308,7 @@ object AppReportHelper {
                 "executor" -> "محرك الأوامر"
                 "treedoc" -> "مستكشف الملفات"
                 "gemini" -> "ذكاء اصطناعي"
+                "clipboard_service", "clipboard_history" -> "الحافظة"
                 else -> "النظام والخدمات"
             }
 
@@ -251,6 +317,7 @@ object AppReportHelper {
                 "executor" -> "⚙️"
                 "treedoc" -> "📁"
                 "gemini" -> "🧠"
+                "clipboard_service", "clipboard_history" -> "📋"
                 else -> "ℹ"
             }
             val finalIcon = if (isFail) "❌" else icon
@@ -260,8 +327,8 @@ object AppReportHelper {
                     <td style="text-align:center;"><span class="badge">$finalIcon</span></td>
                     <td><strong>$typeLabel</strong></td>
                     <td>
-                        <div class="msg-text">${htmlEscape(log.message)}</div>
-                        <div class="details-text">${htmlEscape(detail)}</div>
+                        <div class="msg-text">${htmlEscape(msg)}</div>
+                        ${if (includeDetails && detail.isNotBlank()) "<div class=\"details-text\">${htmlEscape(detail)}</div>" else ""}
                     </td>
                     <td><span class="timestamp">${sdf.format(Date(log.timestamp))}</span></td>
                 </tr>
@@ -366,62 +433,146 @@ object AppReportHelper {
             .replace("'", "&#x27;")
     }
 
-    fun generateTxtReport(logs: List<LogEntity>, editedMap: Map<Int, String>): String {
+    fun generateTxtReport(
+        logs: List<LogEntity>, 
+        editedMap: Map<Int, String>,
+        includeDetails: Boolean = true,
+        anonymize: Boolean = false,
+        style: String = "detailed"
+    ): String {
         val sb = java.lang.StringBuilder()
         val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-        sb.appendLine("=== تقرير سجل الأحداث - المراقب الذكي ===")
-        sb.appendLine("تاريخ التصدير: ${sdf.format(Date())}")
-        sb.appendLine("========================================")
-        for (log in logs) {
-            val details = editedMap[log.id] ?: log.details ?: ""
-            val timeStr = sdf.format(Date(log.timestamp))
-            sb.appendLine("[$timeStr] [${log.type.uppercase(Locale.ROOT)}] ${log.message}")
-            if (details.isNotBlank()) {
-                sb.appendLine("   التفاصيل: $details")
+        
+        when (style) {
+            "markdown" -> {
+                sb.appendLine("# 📊 تقرير سجل الأحداث - المراقب الذكي")
+                sb.appendLine("* **تاريخ التصدير:** ${sdf.format(Date())}")
+                sb.appendLine("* **إجمالي السجلات المصدرة:** ${logs.size}")
+                sb.appendLine()
+                sb.appendLine("---")
+                sb.appendLine()
+                for (log in logs) {
+                    val rawMsg = log.message
+                    val msg = if (anonymize) anonymizeText(rawMsg) else rawMsg
+                    val rawDetails = editedMap[log.id] ?: log.details ?: ""
+                    val details = if (anonymize) anonymizeText(rawDetails) else rawDetails
+                    
+                    val isFail = msg.contains("❌") || msg.contains("فشل") || details.contains("❌") || details.contains("فشل")
+                    val statusEmoji = if (isFail) "❌" else "✅"
+                    val timeStr = sdf.format(Date(log.timestamp))
+                    
+                    sb.appendLine("### $statusEmoji [${log.type.uppercase(Locale.ROOT)}] - $timeStr")
+                    sb.appendLine("> **الحدث:** $msg")
+                    if (includeDetails && details.isNotBlank()) {
+                        sb.appendLine()
+                        sb.appendLine("```text")
+                        sb.appendLine(details)
+                        sb.appendLine("```")
+                    }
+                    sb.appendLine()
+                    sb.appendLine("---")
+                    sb.appendLine()
+                }
+            }
+            "simple" -> {
+                for (log in logs) {
+                    val rawMsg = log.message
+                    val msg = if (anonymize) anonymizeText(rawMsg) else rawMsg
+                    val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(log.timestamp))
+                    sb.appendLine("[$timeStr] $msg")
+                    if (includeDetails) {
+                        val rawDetails = editedMap[log.id] ?: log.details ?: ""
+                        val details = if (anonymize) anonymizeText(rawDetails) else rawDetails
+                        if (details.isNotBlank()) {
+                            sb.appendLine("  -> $details")
+                        }
+                    }
+                }
+            }
+            else -> { // "detailed"
+                sb.appendLine("=== تقرير سجل الأحداث - المراقب الذكي ===")
+                sb.appendLine("تاريخ التصدير: ${sdf.format(Date())}")
+                sb.appendLine("========================================")
+                for (log in logs) {
+                    val rawMsg = log.message
+                    val msg = if (anonymize) anonymizeText(rawMsg) else rawMsg
+                    val rawDetails = editedMap[log.id] ?: log.details ?: ""
+                    val details = if (anonymize) anonymizeText(rawDetails) else rawDetails
+                    
+                    val timeStr = sdf.format(Date(log.timestamp))
+                    sb.appendLine("[$timeStr] [${log.type.uppercase(Locale.ROOT)}] $msg")
+                    if (includeDetails && details.isNotBlank()) {
+                        sb.appendLine("   التفاصيل: $details")
+                    }
+                }
             }
         }
         return sb.toString()
     }
 
-    fun generateCsvReport(logs: List<LogEntity>, editedMap: Map<Int, String>): String {
+    fun generateCsvReport(
+        logs: List<LogEntity>, 
+        editedMap: Map<Int, String>,
+        includeDetails: Boolean = true,
+        anonymize: Boolean = false,
+        delimiter: String = ","
+    ): String {
         val sb = java.lang.StringBuilder()
         val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-        sb.appendLine("ID,Timestamp,Type,Message,Details,Status")
+        val delim = if (delimiter == "tab") "\t" else delimiter
+        sb.appendLine("ID${delim}Timestamp${delim}Type${delim}Message${delim}Details${delim}Status")
         for (log in logs) {
-            val details = editedMap[log.id] ?: log.details ?: ""
-            val isFail = log.message.contains("❌") || log.message.contains("فشل") || details.contains("❌") || details.contains("فشل")
+            val rawMsg = log.message
+            val msg = if (anonymize) anonymizeText(rawMsg) else rawMsg
+            val rawDetails = editedMap[log.id] ?: log.details ?: ""
+            val details = if (anonymize) anonymizeText(rawDetails) else rawDetails
+            
+            val isFail = msg.contains("❌") || msg.contains("فشل") || details.contains("❌") || details.contains("فشل")
             val status = if (isFail) "FAILED" else "SUCCESS"
             val timeStr = sdf.format(Date(log.timestamp))
             
-            val csvMsg = log.message.replace("\"", "\"\"")
-            val csvDet = details.replace("\"", "\"\"")
-            sb.appendLine("${log.id},\"$timeStr\",\"${log.type}\",\"$csvMsg\",\"$csvDet\",\"$status\"")
+            val csvMsg = msg.replace("\"", "\"\"")
+            val csvDet = if (includeDetails) details.replace("\"", "\"\"") else ""
+            sb.appendLine("${log.id}${delim}\"$timeStr\"${delim}\"${log.type}\"${delim}\"$csvMsg\"${delim}\"$csvDet\"${delim}\"$status\"")
         }
         return sb.toString()
     }
 
-    fun generateJsonReport(logs: List<LogEntity>, editedMap: Map<Int, String>): String {
+    fun generateJsonReport(
+        logs: List<LogEntity>, 
+        editedMap: Map<Int, String>,
+        includeDetails: Boolean = true,
+        anonymize: Boolean = false,
+        indent: Int = 4
+    ): String {
         val rootArray = JSONArray()
         val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
         for (log in logs) {
-            val details = editedMap[log.id] ?: log.details ?: ""
-            val isFail = log.message.contains("❌") || log.message.contains("فشل") || details.contains("❌") || details.contains("فشل")
+            val rawMsg = log.message
+            val msg = if (anonymize) anonymizeText(rawMsg) else rawMsg
+            val rawDetails = editedMap[log.id] ?: log.details ?: ""
+            val details = if (anonymize) anonymizeText(rawDetails) else rawDetails
+            
+            val isFail = msg.contains("❌") || msg.contains("فشل") || details.contains("❌") || details.contains("فشل")
             val obj = JSONObject().apply {
                 put("id", log.id)
                 put("timestamp", sdf.format(Date(log.timestamp)))
                 put("type", log.type)
-                put("message", log.message)
-                put("details", details)
+                put("message", msg)
+                if (includeDetails) {
+                    put("details", details)
+                }
                 put("status", if (isFail) "FAILED" else "SUCCESS")
             }
             rootArray.put(obj)
         }
-        return rootArray.toString(4)
+        return if (indent > 0) rootArray.toString(indent) else rootArray.toString()
     }
 
-    fun saveAndOpenHtmlReport(context: Context, html: String) {
+    fun saveAndOpenHtmlReport(context: Context, html: String, targetDir: File? = null) {
         try {
-            val root = context.getExternalFilesDir(null) ?: context.filesDir
+            val root = targetDir ?: context.getExternalFilesDir(null) ?: context.filesDir
+            if (!root.exists()) root.mkdirs()
             val reportFile = File(root, "interactive_log_report.html")
             reportFile.writeText(html, Charsets.UTF_8)
             
@@ -443,15 +594,16 @@ object AppReportHelper {
             chooserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(chooserIntent)
             
-            android.widget.Toast.makeText(context, "✅ تم توليد وتصدير التقرير بنجاح وحفظه في: ${reportFile.name}", android.widget.Toast.LENGTH_LONG).show()
+            android.widget.Toast.makeText(context, "✅ تم توليد وتصدير التقرير بنجاح وحفظه في: ${reportFile.absolutePath}", android.widget.Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
             android.widget.Toast.makeText(context, "⚠️ فشل في فتح المتصفح التلقائي: ${e.message}\nلكن تم نسخ ملف HTML للحافظة بنجاح!", android.widget.Toast.LENGTH_LONG).show()
         }
     }
 
-    fun saveAndShareFile(context: Context, content: String, filename: String, mimeType: String) {
+    fun saveAndShareFile(context: Context, content: String, filename: String, mimeType: String, targetDir: File? = null) {
         try {
-            val root = context.getExternalFilesDir(null) ?: context.filesDir
+            val root = targetDir ?: context.getExternalFilesDir(null) ?: context.filesDir
+            if (!root.exists()) root.mkdirs()
             val file = File(root, filename)
             file.writeText(content, Charsets.UTF_8)
             
@@ -468,7 +620,7 @@ object AppReportHelper {
             chooserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(chooserIntent)
             
-            android.widget.Toast.makeText(context, "✅ تم حفظ الملف باسم ($filename) بنجاح وجاهز للمشاركة!", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(context, "✅ تم حفظ الملف باسم ($filename) في: ${file.absolutePath} بنجاح!", android.widget.Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             android.widget.Toast.makeText(context, "❌ فشل حفظ ومشاركة الملف: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
         }

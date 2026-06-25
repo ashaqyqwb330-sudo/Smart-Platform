@@ -245,7 +245,8 @@ object SmartCaptureEngine {
                         com.example.db.LogEntity(
                             type = "context_manager",
                             message = "تم حفظ مستند (${savedFiles.first().fileName}) بنجاح في سياق المشروع الحالي: $currentProj",
-                            details = "تم الحفظ تلقائياً دون الحاجة إلى توجيه لأن النصوص الواردة مطابقة لسياق الكلمات المفتاحية للمشروع.\nالملفات: ${savedFiles.joinToString { it.fileName }}"
+                            details = "تم الحفظ تلقائياً دون الحاجة إلى توجيه لأن النصوص الواردة مطابقة لسياق الكلمات المفتاحية للمشروع.\nالملفات: ${savedFiles.joinToString { it.fileName }}",
+                            source = "smartcapture"
                         )
                     )
                 } catch (e: Exception) {

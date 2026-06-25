@@ -320,8 +320,8 @@ fun GlossaryCardComponent(item: GlossaryItem) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Color(0xFF0F172A), RoundedCornerShape(8.dp))
-                            .border(1.dp, Color(0xFF334155), RoundedCornerShape(8.dp))
+                            .background(GlassWhite, RoundedCornerShape(8.dp))
+                            .border(1.dp, GlassBorder, RoundedCornerShape(8.dp))
                             .padding(10.dp)
                     ) {
                         Text(
@@ -783,8 +783,8 @@ fun InteractiveSimulatorPane() {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Color(0xFF0F172A), RoundedCornerShape(8.dp))
-                            .border(0.5.dp, Color(0xFF334155), RoundedCornerShape(8.dp))
+                            .background(GlassWhite, RoundedCornerShape(8.dp))
+                            .border(0.5.dp, GlassBorder, RoundedCornerShape(8.dp))
                             .padding(10.dp)
                     ) {
                         Text(

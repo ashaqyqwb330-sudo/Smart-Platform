@@ -71,6 +71,10 @@ class GoldenBubbleService : Service(), LifecycleOwner {
     private lateinit var statusCircle: View
     private lateinit var statusTxt: TextView
     private lateinit var lastActionTxt: TextView
+    private var sourceBarLayout: LinearLayout? = null
+    private var sourceIconTxt: TextView? = null
+    private var sourceNameTxt: TextView? = null
+    private var contextActionsRow: LinearLayout? = null
     private lateinit var toggleStatusBtn: Button
     
     private lateinit var bubbleStatusTxt: TextView
@@ -324,11 +328,11 @@ class GoldenBubbleService : Service(), LifecycleOwner {
                                 FileEntity(path = path, fullPath = fullPath, size = size, mode = mode)
                             )
                             database.dao().insertLog(
-                                LogEntity(type = "builder", message = "الفقاعة الذهبية: تم إنشاء $path", details = res.message)
+                                LogEntity(type = "builder", message = "الفقاعة الذهبية: تم إنشاء $path", details = res.message, source = "bubble")
                             )
                         } else {
                             database.dao().insertLog(
-                                LogEntity(type = res.type, message = "الفقاعة الذهبية: إجراء ${res.type}", details = res.message)
+                                LogEntity(type = res.type, message = "الفقاعة الذهبية: إجراء ${res.type}", details = res.message, source = "bubble")
                             )
                         }
                     }
@@ -358,7 +362,116 @@ class GoldenBubbleService : Service(), LifecycleOwner {
             if (::bubbleStatusTxt.isInitialized) {
                 bubbleStatusTxt.text = msg
             }
+            updateContextualActions(msg, "")
         } catch (e: Exception) {}
+    }
+
+    private fun extractFilePath(message: String, details: String): String? {
+        val combined = "$message\n$details"
+        val filePattern = Regex("""(/[a-zA-Z0-9_.-]+)+(\.[a-zA-Z0-9]+)""")
+        val match1 = filePattern.find(combined)
+        if (match1 != null) return match1.value
+        
+        val simpleFilePattern = Regex("""[a-zA-Z0-9_.-]+\.(html|py|kt|java|txt|json|xml)""", RegexOption.IGNORE_CASE)
+        val match2 = simpleFilePattern.find(combined)
+        if (match2 != null) return match2.value
+        
+        val words = combined.split(Regex("""\s+"""))
+        for (word in words) {
+            val cleaned = word.replace(Regex("""[()\[\]"']"""), "").trim()
+            if (cleaned.endsWith(".html") || cleaned.endsWith(".kt") || cleaned.endsWith(".java") || 
+                cleaned.endsWith(".py") || cleaned.endsWith(".txt") || cleaned.endsWith(".json") || 
+                cleaned.endsWith(".xml")) {
+                return cleaned
+            }
+        }
+        
+        if (combined.contains("مجلد باسم '")) {
+            val folder = combined.substringAfter("مجلد باسم '").substringBefore("'")
+            if (folder.isNotEmpty()) return folder
+        }
+        if (combined.contains("مجلد باسم ")) {
+            val folder = combined.substringAfter("مجلد باسم ").split(" ").firstOrNull()?.trim()
+            if (!folder.isNullOrEmpty()) return folder
+        }
+        if (combined.contains("مجلد: ")) {
+            val folder = combined.substringAfter("مجلد: ").split(" ").firstOrNull()?.trim()
+            if (!folder.isNullOrEmpty()) return folder
+        }
+        
+        return null
+    }
+
+    private fun updateContextualActions(message: String, details: String) {
+        val row = contextActionsRow ?: return
+        row.removeAllViews()
+        
+        val extractedPath = extractFilePath(message, details)
+        if (extractedPath != null) {
+            row.visibility = View.VISIBLE
+            
+            val isHtml = extractedPath.endsWith(".html", ignoreCase = true)
+            val isTextOrCode = extractedPath.endsWith(".py", ignoreCase = true) ||
+                    extractedPath.endsWith(".kt", ignoreCase = true) ||
+                    extractedPath.endsWith(".java", ignoreCase = true) ||
+                    extractedPath.endsWith(".txt", ignoreCase = true) ||
+                    extractedPath.endsWith(".json", ignoreCase = true) ||
+                    extractedPath.endsWith(".xml", ignoreCase = true)
+            
+            val isFolder = !isHtml && !isTextOrCode && !extractedPath.contains(".")
+            
+            if (isHtml) {
+                val btnPreview = Button(this).apply {
+                    text = "👁️ معاينة"
+                    textSize = 9f
+                    setTextColor(Color.WHITE)
+                    setPadding(dpToPx(8), 0, dpToPx(8), 0)
+                    background = createRoundedDrawable("#10B981", 6f)
+                    val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dpToPx(28)).apply {
+                        setMargins(0, 0, dpToPx(4), 0)
+                    }
+                    layoutParams = lp
+                    setOnClickListener {
+                        com.example.engine.FileUtils.openFileSafely(applicationContext, extractedPath)
+                    }
+                }
+                row.addView(btnPreview)
+            } else if (isTextOrCode) {
+                val btnEdit = Button(this).apply {
+                    text = "✏️ تحرير"
+                    textSize = 9f
+                    setTextColor(Color.WHITE)
+                    setPadding(dpToPx(8), 0, dpToPx(8), 0)
+                    background = createRoundedDrawable("#3B82F6", 6f)
+                    val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dpToPx(28)).apply {
+                        setMargins(0, 0, dpToPx(4), 0)
+                    }
+                    layoutParams = lp
+                    setOnClickListener {
+                        com.example.engine.FileUtils.openFileSafely(applicationContext, extractedPath)
+                    }
+                }
+                row.addView(btnEdit)
+            } else if (isFolder) {
+                val btnOpen = Button(this).apply {
+                    text = "📂 فتح"
+                    textSize = 9f
+                    setTextColor(Color.WHITE)
+                    setPadding(dpToPx(8), 0, dpToPx(8), 0)
+                    background = createRoundedDrawable("#D97706", 6f)
+                    val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dpToPx(28)).apply {
+                        setMargins(0, 0, dpToPx(4), 0)
+                    }
+                    layoutParams = lp
+                    setOnClickListener {
+                        com.example.engine.FileUtils.openFileSafely(applicationContext, extractedPath)
+                    }
+                }
+                row.addView(btnOpen)
+            }
+        } else {
+            row.visibility = View.GONE
+        }
     }
 
     private fun dpToPx(dp: Int): Int {
@@ -986,6 +1099,34 @@ class GoldenBubbleService : Service(), LifecycleOwner {
         expanded.addView(activeProjRow)
 
         // 4. آخر إجراء
+        sourceBarLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            visibility = View.GONE
+            val sbParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, 0, dpToPx(3))
+            }
+            layoutParams = sbParams
+        }
+        sourceIconTxt = TextView(this).apply {
+            text = "🟢"
+            textSize = 10f
+            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, dpToPx(4), 0)
+            }
+            layoutParams = lp
+        }
+        sourceNameTxt = TextView(this).apply {
+            text = "تلقائي"
+            textSize = 10f
+            setTextColor(Color.parseColor("#10B981"))
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        sourceBarLayout?.addView(sourceIconTxt)
+        sourceBarLayout?.addView(sourceNameTxt)
+        expanded.addView(sourceBarLayout)
+
         lastActionTxt = TextView(this).apply {
             text = "آخر إجراء: لا توجد عمليات حالية"
             setTextColor(Color.parseColor("#CBD5E1"))
@@ -995,11 +1136,22 @@ class GoldenBubbleService : Service(), LifecycleOwner {
             background = createRoundedDrawable("#0F0F1E", 4f)
             setPadding(dpToPx(6), dpToPx(6), dpToPx(6), dpToPx(6))
             val laParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                setMargins(0, 0, 0, dpToPx(6))
+                setMargins(0, 0, 0, dpToPx(4))
             }
             layoutParams = laParams
         }
         expanded.addView(lastActionTxt)
+
+        contextActionsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            visibility = View.GONE
+            val caParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, 0, dpToPx(6))
+            }
+            layoutParams = caParams
+        }
+        expanded.addView(contextActionsRow)
 
         // 5. فاصل
         val divider1 = View(this).apply {
@@ -1120,6 +1272,63 @@ class GoldenBubbleService : Service(), LifecycleOwner {
             database.dao().getAllLogs().collect { logsList ->
                 currentFullLogs = logsList
                 redrawLogs(logsList)
+            }
+        }
+
+        serviceScope.launch {
+            database.dao().getLastSignificantEvent().collect { log ->
+                withContext(Dispatchers.Main) {
+                    if (log != null) {
+                        val sourceIcon = when (log.source) {
+                            "bubble" -> "🫧"
+                            "ime" -> "⌨️"
+                            "auto" -> "🟢"
+                            "manual" -> "✍️"
+                            "buildpack" -> "📦"
+                            "smartcapture" -> "🧠"
+                            else -> "🟢"
+                        }
+                        val sourceName = when (log.source) {
+                            "bubble" -> "الفقاعة"
+                            "ime" -> "الكيبورد"
+                            "auto" -> "تلقائي"
+                            "manual" -> "يدوي"
+                            "buildpack" -> "حزمة البناء"
+                            "smartcapture" -> "الالتقاط الذكي"
+                            else -> "تلقائي"
+                        }
+                        val sourceColor = when (log.source) {
+                            "bubble" -> "#D97706"
+                            "ime" -> "#3B82F6"
+                            "auto" -> "#10B981"
+                            "manual" -> "#8B5CF6"
+                            "buildpack" -> "#F59E0B"
+                            "smartcapture" -> "#EC4899"
+                            else -> "#10B981"
+                        }
+
+                        sourceIconTxt?.text = sourceIcon
+                        sourceNameTxt?.text = sourceName
+                        sourceNameTxt?.setTextColor(Color.parseColor(sourceColor))
+                        sourceBarLayout?.visibility = View.VISIBLE
+
+                        val displayMsg = log.message
+                        lastActionTxt.text = displayMsg
+                        if (::bubbleStatusTxt.isInitialized) {
+                            bubbleStatusTxt.text = displayMsg
+                        }
+
+                        updateContextualActions(log.message, log.details ?: "")
+                    } else {
+                        sourceBarLayout?.visibility = View.GONE
+                        lastActionTxt.text = "آخر إجراء: لا توجد عمليات حالية"
+                        if (::bubbleStatusTxt.isInitialized) {
+                            bubbleStatusTxt.text = "لا توجد عمليات حالية"
+                        }
+                        contextActionsRow?.removeAllViews()
+                        contextActionsRow?.visibility = View.GONE
+                    }
+                }
             }
         }
 
@@ -1788,7 +1997,8 @@ class GoldenBubbleService : Service(), LifecycleOwner {
                     LogEntity(
                         type = "context_manager",
                         message = "تم الحفظ في مسار المشروع ذو الصلة ($currentProj)",
-                        details = "تم تأكيد الحفظ بواسطة المستخدم بنجاح.\nالملفات: ${results.savedFiles.joinToString { it.fileName }}"
+                        details = "تم تأكيد الحفظ بواسطة المستخدم بنجاح.\nالملفات: ${results.savedFiles.joinToString { it.fileName }}",
+                        source = "bubble"
                     )
                 )
                 
@@ -1870,7 +2080,8 @@ class GoldenBubbleService : Service(), LifecycleOwner {
                     LogEntity(
                         type = "context_manager",
                         message = "إنشاء مجلد: تم إنشاء مجلد باسم '$finalFolder' وحفظ المستند فيه.",
-                        details = "تم الحفظ بنجاح.\nالملفات: ${results.savedFiles.joinToString { it.fileName }}"
+                        details = "تم الحفظ بنجاح.\nالملفات: ${results.savedFiles.joinToString { it.fileName }}",
+                        source = "bubble"
                     )
                 )
             } catch (e: Exception) {
@@ -2061,7 +2272,8 @@ class GoldenBubbleService : Service(), LifecycleOwner {
                                     com.example.db.LogEntity(
                                         type = "builder",
                                         message = "تطبيق حزمة البناء: تم إنشاء $path من الكرة العائمة",
-                                        details = "المسار: $fullPath"
+                                        details = "المسار: $fullPath",
+                                        source = "bubble"
                                     )
                                 )
                             }

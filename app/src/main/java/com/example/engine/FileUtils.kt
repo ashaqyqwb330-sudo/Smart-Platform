@@ -9,26 +9,27 @@ import java.io.File
 
 object FileUtils {
     fun openFile(context: Context, filePath: String) {
+        openFileSafely(context, filePath)
+    }
+
+    fun openFileSafely(context: Context, path: String) {
         try {
-            var file = File(filePath)
-            if (!file.isAbsolute) {
-                val currentProjDir = ProjectContextManager.getCurrentProjectDir(context)
-                val resolvedInProj = File(currentProjDir, filePath)
+            var file = File(path)
+            if (!file.exists() || !file.isAbsolute) {
+                val resolvedInProj = File(ProjectContextManager.getCurrentProjectDir(context), path)
                 if (resolvedInProj.exists()) {
                     file = resolvedInProj
                 } else {
-                    val baseDir = ProjectContextManager.getBaseDir(context)
-                    val resolvedInBase = File(baseDir, filePath)
+                    val resolvedInBase = File(ProjectContextManager.getBaseDir(context), path)
                     if (resolvedInBase.exists()) {
                         file = resolvedInBase
                     } else {
-                        // Let's also check if filePath was logged as a direct file name or contains path components we need to strip/find
-                        val fileNameOnly = File(filePath).name
-                        val resolvedInProjName = File(currentProjDir, fileNameOnly)
+                        val fileNameOnly = File(path).name
+                        val resolvedInProjName = File(ProjectContextManager.getCurrentProjectDir(context), fileNameOnly)
                         if (resolvedInProjName.exists()) {
                             file = resolvedInProjName
                         } else {
-                            val resolvedInBaseName = File(baseDir, fileNameOnly)
+                            val resolvedInBaseName = File(ProjectContextManager.getBaseDir(context), fileNameOnly)
                             if (resolvedInBaseName.exists()) {
                                 file = resolvedInBaseName
                             }
@@ -38,7 +39,7 @@ object FileUtils {
             }
             
             if (!file.exists()) {
-                Toast.makeText(context, "الملف غير موجود أو تم حذفه!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "تعذر العثور على الملف: $path", Toast.LENGTH_SHORT).show()
                 return
             }
             
@@ -46,11 +47,10 @@ object FileUtils {
             val uri = FileProvider.getUriForFile(context, authority, file)
             
             val mimeType = when {
-                filePath.endsWith(".html") -> "text/html"
-                filePath.endsWith(".py") || filePath.endsWith(".java") || filePath.endsWith(".kt") -> "text/plain"
-                filePath.endsWith(".json") -> "application/json"
-                filePath.endsWith(".xml") -> "text/xml"
-                filePath.endsWith(".txt") -> "text/plain"
+                file.name.endsWith(".html") -> "text/html"
+                file.name.endsWith(".py") || file.name.endsWith(".java") || file.name.endsWith(".kt") || file.name.endsWith(".txt") -> "text/plain"
+                file.name.endsWith(".json") -> "application/json"
+                file.name.endsWith(".xml") -> "text/xml"
                 else -> "*/*"
             }
             
@@ -61,7 +61,7 @@ object FileUtils {
             }
             context.startActivity(intent)
         } catch (e: Exception) {
-            Log.e("FileUtils", "Error opening file: ${e.message}", e)
+            Log.e("FileUtils", "Error opening file safely: ${e.message}", e)
             Toast.makeText(context, "فشل فتح الملف: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
         }
     }

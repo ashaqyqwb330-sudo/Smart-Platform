@@ -169,6 +169,17 @@ class ClipboardAccessibilityService : AccessibilityService() {
                     .putString("live_clipboard_text", text)
                     .apply()
 
+                // Save to database clipboard history log
+                serviceScope.launch(Dispatchers.IO) {
+                    database.dao().insertLog(
+                        LogEntity(
+                            type = "clipboard_history",
+                            message = "نص ملتقط من الحافظة",
+                            details = text
+                        )
+                    )
+                }
+
                 // Broadcast raw text change
                 try {
                     val updateIntent = Intent("com.example.ACTION_CLIPBOARD_UPDATED").apply {

@@ -1143,7 +1143,8 @@ class BuilderIME : InputMethodService() {
                                 LogEntity(
                                     type = "builder",
                                     message = "IME: تم إنشاء الملف: $path",
-                                    details = res.message
+                                    details = res.message,
+                                    source = "ime"
                                 )
                             )
                         }
@@ -1153,7 +1154,8 @@ class BuilderIME : InputMethodService() {
                                 LogEntity(
                                     type = "executor",
                                     message = "IME: تنفيذ أمر المنفذ",
-                                    details = res.message
+                                    details = res.message,
+                                    source = "ime"
                                 )
                             )
                         }
@@ -1163,7 +1165,8 @@ class BuilderIME : InputMethodService() {
                                 LogEntity(
                                     type = "treedoc",
                                     message = "IME: توليد تقرير TreeDoc الشجري",
-                                    details = res.message
+                                    details = res.message,
+                                    source = "ime"
                                 )
                             )
                         }
@@ -1210,7 +1213,8 @@ class BuilderIME : InputMethodService() {
                     LogEntity(
                         type = "clipboard_ime",
                         message = title,
-                        details = message
+                        details = message,
+                        source = "ime"
                     )
                 )
             }

@@ -9,5 +9,6 @@ data class LogEntity(
     val timestamp: Long = System.currentTimeMillis(),
     val type: String, // "builder", "executor", "treedoc", "clipboard_service", "system", "gemini"
     val message: String,
-    val details: String? = null // Optional details or full content
+    val details: String? = null, // Optional details or full content
+    val source: String = "auto"
 )

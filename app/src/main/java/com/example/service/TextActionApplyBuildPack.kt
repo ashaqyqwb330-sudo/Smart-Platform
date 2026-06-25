@@ -45,7 +45,8 @@ class TextActionApplyBuildPack : BaseTextActionActivity() {
                             com.example.db.LogEntity(
                                 type = "builder",
                                 message = "تطبيق حزمة البناء: تم إنشاء $path",
-                                details = "المسار: $fullPath"
+                                details = "المسار: $fullPath",
+                                source = "buildpack"
                             )
                         )
                     } else {
@@ -53,7 +54,8 @@ class TextActionApplyBuildPack : BaseTextActionActivity() {
                             com.example.db.LogEntity(
                                 type = res.type,
                                 message = "تطبيق حزمة البناء: إجراء ${res.type}",
-                                details = res.message
+                                details = res.message,
+                                source = "buildpack"
                             )
                         )
                     }

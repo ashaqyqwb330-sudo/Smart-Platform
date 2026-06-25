@@ -57,12 +57,14 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import com.example.db.FileEntity
 import com.example.db.LogEntity
 import com.example.service.ClipboardMonitorService
 import com.example.service.ClipboardAccessibilityService
 import com.example.ui.theme.*
 import com.example.viewmodel.MainViewModel
+import com.example.viewmodel.AiTaskRecord
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -632,7 +634,7 @@ fun MainAppContent(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(0.92f)
-                        .background(Color(0xFF16152B), RoundedCornerShape(26.dp))
+                        .background(CardSlateBg, RoundedCornerShape(26.dp))
                         .border(1.5.dp, Brush.linearGradient(listOf(MetallicGold, BrightGold)), RoundedCornerShape(26.dp))
                         .padding(24.dp)
                 ) {
@@ -925,8 +927,38 @@ fun MonitorScreen(viewModel: MainViewModel) {
     var editingLogForDetails by remember { mutableStateOf<LogEntity?>(null) }
     var editingLogTextState by remember { mutableStateOf("") }
 
+    // Advanced Event Logs Premium States (Enhanced Filtering & Formats)
+    var selectedDurationFilter by remember { mutableStateOf("الكل") } // "الكل", "آخر ساعة", "آخر 24 ساعة", "آخر 7 أيام"
+    var selectedSourceFilter by remember { mutableStateOf("الكل") } // "الكل", "منظم المجلد", "محرك الأوامر", "الذكاء الاصطناعي", "النظام", "الحافظة"
+    var searchLogQuery by remember { mutableStateOf("") }
+    
+    // Export Option States
+    var exportIncludeDetails by remember { mutableStateOf(true) }
+    var exportAnonymizeSensitive by remember { mutableStateOf(false) }
+    var exportHtmlTheme by remember { mutableStateOf("dark") } // "dark", "light", "gold"
+    var exportToSettingsDir by remember { mutableStateOf(true) } // true: settings path, false: external/default
+    var exportTxtStyle by remember { mutableStateOf("detailed") } // "detailed", "simple", "markdown"
+    var exportCsvDelimiter by remember { mutableStateOf(",") } // ",", ";", "tab"
+    var exportJsonIndent by remember { mutableStateOf(4) } // 2, 4, 0 (compressed)
+
+    // --- Smart Clipboard & AI Task Hub States ---
+    var activeHubTab by remember { mutableStateOf("clipboard") }
+    var clipboardSearch by remember { mutableStateOf("") }
+    var clipboardFilterType by remember { mutableStateOf("ALL") }
+    var showAddTaskDialog by remember { mutableStateOf(false) }
+    var newTaskTitle by remember { mutableStateOf("") }
+    var newTaskType by remember { mutableStateOf("تحليل ذكي") }
+    var newTaskCommand by remember { mutableStateOf("") }
+    var selectedTaskDetail by remember { mutableStateOf<AiTaskRecord?>(null) }
+    var editingClipboardLog by remember { mutableStateOf<LogEntity?>(null) }
+    var editingClipboardText by remember { mutableStateOf("") }
+
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val smartPrefs = remember(context) { context.getSharedPreferences("SmartPrefs", Context.MODE_PRIVATE) }
+    var minLogChars by remember { mutableStateOf(smartPrefs.getInt("clipboard_min_log_chars", 8)) }
+    var autoProcessQueue by remember { mutableStateOf(smartPrefs.getBoolean("auto_process_ai_queue", true)) }
+    var notifyOnComplete by remember { mutableStateOf(smartPrefs.getBoolean("notify_on_task_completion", true)) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -1235,6 +1267,957 @@ fun MonitorScreen(viewModel: MainViewModel) {
             }
         }
 
+        // --- Smart Clipboard & AI Task Hub Widget ---
+        item {
+            val smartPrefs = remember(context) { context.getSharedPreferences("SmartPrefs", Context.MODE_PRIVATE) }
+            
+            val clipboardLogs = remember(eventLogs) {
+                eventLogs.filter { it.type == "clipboard_history" }
+            }
+            
+            val aiTasksQueueState = viewModel.aiTasksQueue.collectAsState().value
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp)
+                    .background(GlassWhite, RoundedCornerShape(24.dp))
+                    .border(1.dp, GlassBorder, RoundedCornerShape(24.dp))
+                    .padding(16.dp)
+            ) {
+                // Header of the Hub
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(GoldGlassBg, CircleShape)
+                                .border(1.dp, MetallicGold.copy(alpha = 0.5f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = null,
+                                tint = MetallicGold,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Column {
+                            Text(
+                                text = "لوحة الحافظة والمهام الذكية",
+                                color = TextSilver,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "مراقبة الحافظة، إدارة طابور المهام وتصنيفاتها المعززة",
+                                color = TextMuted,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+                    
+                    Box(
+                        modifier = Modifier
+                            .background(GoldGlassBg, RoundedCornerShape(8.dp))
+                            .border(1.dp, MetallicGold.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "مساعد مفعّل",
+                            color = MetallicGold,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Tab buttons (Horizontal Row)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(CardSlateBg.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    val tabs = listOf(
+                        "clipboard" to "📋 الحافظة (${clipboardLogs.size})",
+                        "tasks" to "⚡ المهام (${aiTasksQueueState.size})",
+                        "settings" to "⚙️ تخصيص"
+                    )
+
+                    tabs.forEach { (tabId, label) ->
+                        val isSelected = activeHubTab == tabId
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(
+                                    if (isSelected) MetallicGold else Color.Transparent,
+                                    RoundedCornerShape(10.dp)
+                                )
+                                .clickable { activeHubTab = tabId }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = label,
+                                color = if (isSelected) SlateBg else TextSilver,
+                                fontSize = 10.sp,
+                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // --- TAB 1: CLIPBOARD HISTORY ---
+                if (activeHubTab == "clipboard") {
+                    OutlinedTextField(
+                        value = clipboardSearch,
+                        onValueChange = { clipboardSearch = it },
+                        placeholder = { Text("بحث في الحافظة...", color = TextMuted, fontSize = 11.sp) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = TextSilver,
+                            unfocusedTextColor = TextSilver,
+                            focusedBorderColor = MetallicGold,
+                            unfocusedBorderColor = GlassBorder,
+                            focusedContainerColor = CardSlateBg.copy(alpha = 0.3f),
+                            unfocusedContainerColor = CardSlateBg.copy(alpha = 0.3f)
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        textStyle = TextStyle(fontSize = 11.sp),
+                        singleLine = true,
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = null,
+                                tint = TextGray,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        },
+                        trailingIcon = {
+                            if (clipboardSearch.isNotEmpty()) {
+                                IconButton(onClick = { clipboardSearch = "" }) {
+                                    Icon(
+                                        Icons.Default.Clear,
+                                        contentDescription = null,
+                                        tint = TextGray,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Horizontal Filter Chips
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val filterChips = listOf(
+                            "ALL" to "الكل",
+                            "DIRECTIVE" to "توجيهات 🚀",
+                            "URL" to "روابط 🌐",
+                            "CODE" to "أكواد برمجية 💻",
+                            "TEXT" to "نصوص 📝"
+                        )
+
+                        filterChips.forEach { (typeKey, label) ->
+                            val isSelected = clipboardFilterType == typeKey
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        if (isSelected) GoldGlassBg else CardSlateBg.copy(alpha = 0.3f),
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (isSelected) MetallicGold else GlassBorder,
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable { clipboardFilterType = typeKey }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = label,
+                                    color = if (isSelected) MetallicGold else TextGray,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    val filteredClipboard = remember(clipboardLogs, clipboardSearch, clipboardFilterType) {
+                        clipboardLogs.filter { log ->
+                            val matchesSearch = log.details?.contains(clipboardSearch, ignoreCase = true) == true || 
+                                                log.message.contains(clipboardSearch, ignoreCase = true)
+                            
+                            val details = log.details ?: ""
+                            val computedType = when {
+                                details.startsWith("@builder") || details.startsWith("@executor") || details.startsWith("@treedoc") -> "DIRECTIVE"
+                                details.contains("http://") || details.contains("https://") -> "URL"
+                                details.contains("class ") || details.contains("def ") || details.contains("fun ") || details.contains("import ") || details.contains("{") -> "CODE"
+                                else -> "TEXT"
+                            }
+                            
+                            val matchesType = clipboardFilterType == "ALL" || clipboardFilterType == computedType
+                            matchesSearch && matchesType
+                        }
+                    }
+
+                    if (filteredClipboard.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(100.dp)
+                                .background(CardSlateBg.copy(alpha = 0.2f), RoundedCornerShape(14.dp))
+                                .border(1.dp, GlassBorder, RoundedCornerShape(14.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "سجل الحافظة فارغ أو لم يتم العثور على نتائج تطابق معايير التصفية.",
+                                color = TextMuted,
+                                fontSize = 10.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    } else {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            filteredClipboard.take(6).forEach { log ->
+                                val text = log.details ?: ""
+                                
+                                val (itemIcon, iconColor, categoryLabel) = when {
+                                    text.startsWith("@builder") || text.startsWith("@executor") || text.startsWith("@treedoc") -> 
+                                        Triple(Icons.Default.Star, Color(0xFF60A5FA), "توجيه ذكي")
+                                    text.contains("http://") || text.contains("https://") -> 
+                                        Triple(Icons.Default.Send, Color(0xFFFBBF24), "رابط ويب")
+                                    text.contains("class ") || text.contains("def ") || text.contains("fun ") || text.contains("import ") || text.contains("{") -> 
+                                        Triple(Icons.Default.Create, Color(0xFFA3E635), "كود برمجبي")
+                                    else -> 
+                                        Triple(Icons.Default.List, Color(0xFFA78BFA), "نص عام")
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(CardSlateBg.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                                        .border(1.dp, GlassBorder.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                                        .clickable {
+                                            editingClipboardLog = log
+                                            editingClipboardText = text
+                                        }
+                                        .padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .background(iconColor.copy(alpha = 0.15f), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = itemIcon,
+                                            contentDescription = null,
+                                            tint = iconColor,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    }
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                text = categoryLabel,
+                                                color = iconColor,
+                                                fontSize = 8.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(log.timestamp)),
+                                                color = TextMuted,
+                                                fontSize = 8.sp
+                                            )
+                                        }
+                                        Text(
+                                            text = text,
+                                            color = TextSilver,
+                                            fontSize = 10.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        IconButton(
+                                            onClick = {
+                                                viewModel.runManualProcess(text) { result ->
+                                                    Toast.makeText(context, result, Toast.LENGTH_LONG).show()
+                                                }
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.PlayArrow,
+                                                contentDescription = "نفذ كتوجيه",
+                                                tint = EmeraldGlow,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                        }
+
+                                        IconButton(
+                                            onClick = {
+                                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Copied History", text))
+                                                Toast.makeText(context, "📋 تم نسخ النص للحافظة ثانيةً!", Toast.LENGTH_SHORT).show()
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Share,
+                                                contentDescription = "نسخ",
+                                                tint = MetallicGold,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                        }
+
+                                        IconButton(
+                                            onClick = {
+                                                viewModel.deleteLogById(log.id)
+                                                Toast.makeText(context, "🗑️ تم الحذف من السجل", Toast.LENGTH_SHORT).show()
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "حذف",
+                                                tint = DangerRed,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            TextButton(
+                                onClick = {
+                                    viewModel.deleteLogsByType("clipboard_history")
+                                    Toast.makeText(context, "🗑️ تم إفراغ سجل الحافظة بنجاح", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.align(Alignment.End)
+                            ) {
+                                Text(
+                                    text = "إفراغ سجل الحافظة بالكامل",
+                                    color = DangerRed,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // --- TAB 2: AI TASK QUEUE ---
+                if (activeHubTab == "tasks") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            val activeCount = aiTasksQueueState.count { it.status == "RUNNING" || it.status == "PENDING" }
+                            Text(
+                                text = "طابور الأتمتة: ${aiTasksQueueState.size} مهام",
+                                color = TextSilver,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "مهام معلقة/نشطة حالياً: $activeCount",
+                                color = TextMuted,
+                                fontSize = 9.sp
+                            )
+                        }
+                        
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Button(
+                                onClick = { showAddTaskDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = MetallicGold, contentColor = SlateBg),
+                                contentPadding = PaddingValues(horizontal = 8.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.height(28.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, tint = SlateBg, modifier = Modifier.size(12.dp))
+                                    Text("مهمة ذكية", fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            Button(
+                                onClick = { viewModel.clearCompletedAiTasks() },
+                                colors = ButtonDefaults.buttonColors(containerColor = CardSlateBg, contentColor = TextSilver),
+                                contentPadding = PaddingValues(horizontal = 8.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.height(28.dp)
+                            ) {
+                                Text("تنظيف", fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    if (aiTasksQueueState.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(100.dp)
+                                .background(CardSlateBg.copy(alpha = 0.2f), RoundedCornerShape(14.dp))
+                                .border(1.dp, GlassBorder, RoundedCornerShape(14.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "طابور المهام فارغ. انقر على 'مهمة ذكية' لإضافة وتجربة طابور التشغيل.",
+                                color = TextMuted,
+                                fontSize = 10.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    } else {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            aiTasksQueueState.forEach { task ->
+                                val (statusText, statusColor, borderClr) = when (task.status) {
+                                    "PENDING" -> Triple("معلقة بالصف", TextGray, GlassBorder)
+                                    "RUNNING" -> Triple("جاري التنفيذ...", MetallicGold, MetallicGold.copy(alpha = 0.6f))
+                                    "SUCCESS" -> Triple("اكتملت بنجاح", EmeraldGlow, EmeraldGlow.copy(alpha = 0.5f))
+                                    "FAILED" -> Triple("فشلت المهمة", DangerRed, DangerRed.copy(alpha = 0.5f))
+                                    else -> Triple("مجهول", TextGray, GlassBorder)
+                                }
+
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(CardSlateBg.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                                        .border(1.dp, borderClr, RoundedCornerShape(14.dp))
+                                        .clickable { selectedTaskDetail = task }
+                                        .padding(10.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(statusColor.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                                                    .padding(horizontal = 6.dp, vertical = 3.dp)
+                                            ) {
+                                                Text(
+                                                    text = task.type,
+                                                    color = statusColor,
+                                                    fontSize = 8.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                            Text(
+                                                text = task.title,
+                                                color = TextSilver,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text(
+                                                text = statusText,
+                                                color = statusColor,
+                                                fontSize = 8.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+
+                                            if (task.status == "FAILED") {
+                                                IconButton(
+                                                    onClick = { viewModel.runAiTask(task.id) },
+                                                    modifier = Modifier.size(20.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Refresh, contentDescription = "Retry", tint = MetallicGold, modifier = Modifier.size(12.dp))
+                                                }
+                                            } else if (task.status == "PENDING") {
+                                                IconButton(
+                                                    onClick = { viewModel.runAiTask(task.id) },
+                                                    modifier = Modifier.size(20.dp)
+                                                ) {
+                                                    Icon(Icons.Default.PlayArrow, contentDescription = "Run", tint = EmeraldGlow, modifier = Modifier.size(12.dp))
+                                                }
+                                            }
+
+                                            IconButton(
+                                                onClick = { viewModel.deleteAiTask(task.id) },
+                                                modifier = Modifier.size(20.dp)
+                                            ) {
+                                                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = TextMuted, modifier = Modifier.size(12.dp))
+                                            }
+                                        }
+                                    }
+
+                                    if (task.status == "RUNNING") {
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        LinearProgressIndicator(
+                                            progress = task.progress,
+                                            color = MetallicGold,
+                                            trackColor = CardSlateBg,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(3.dp)
+                                                .clip(RoundedCornerShape(2.dp))
+                                        )
+                                    }
+
+                                    if (task.logs.isNotBlank()) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = task.logs,
+                                            color = TextGray,
+                                            fontSize = 9.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // --- TAB 3: CUSTOMIZATION ---
+                if (activeHubTab == "settings") {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "تخصيص الحافظة والمهام الذكية",
+                            color = MetallicGold,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "الحد الأدنى لطول الحفظ: $minLogChars حرفاً",
+                                    color = TextSilver,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "تجاهل النصوص المنسوخة بالغة الصغر لمنع الاكتظاظ",
+                                    color = TextMuted,
+                                    fontSize = 8.sp
+                                )
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                TextButton(onClick = { 
+                                    if (minLogChars > 1) {
+                                        minLogChars -= 1
+                                        smartPrefs.edit().putInt("clipboard_min_log_chars", minLogChars).apply()
+                                    }
+                                }) {
+                                    Text("-", color = MetallicGold, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                }
+                                TextButton(onClick = { 
+                                    if (minLogChars < 50) {
+                                        minLogChars += 1
+                                        smartPrefs.edit().putInt("clipboard_min_log_chars", minLogChars).apply()
+                                    }
+                                }) {
+                                    Text("+", color = MetallicGold, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        Divider(color = GlassBorder.copy(alpha = 0.3f))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "التشغيل التلقائي للمهام",
+                                    color = TextSilver,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "معالجة المهام الجديدة المضافة فوراً بدون انتظار نقرة",
+                                    color = TextMuted,
+                                    fontSize = 8.sp
+                                )
+                            }
+                            Switch(
+                                checked = autoProcessQueue,
+                                onCheckedChange = {
+                                    autoProcessQueue = it
+                                    smartPrefs.edit().putBoolean("auto_process_ai_queue", it).apply()
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = SlateBg,
+                                    checkedTrackColor = MetallicGold,
+                                    uncheckedThumbColor = TextGray,
+                                    uncheckedTrackColor = CardSlateBg
+                                )
+                            )
+                        }
+
+                        Divider(color = GlassBorder.copy(alpha = 0.3f))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "تنبيه عند انتهاء المهمة",
+                                    color = TextSilver,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "إظهار إشعار Toast عند اكتمال أو فشل معالجة المهام",
+                                    color = TextMuted,
+                                    fontSize = 8.sp
+                                )
+                            }
+                            Switch(
+                                checked = notifyOnComplete,
+                                onCheckedChange = {
+                                    notifyOnComplete = it
+                                    smartPrefs.edit().putBoolean("notify_on_task_completion", it).apply()
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = SlateBg,
+                                    checkedTrackColor = MetallicGold,
+                                    uncheckedThumbColor = TextGray,
+                                    uncheckedTrackColor = CardSlateBg
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- Dialogs supporting the Hub ---
+        item {
+            if (showAddTaskDialog) {
+                Dialog(onDismissRequest = { showAddTaskDialog = false }) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(SlateBg, RoundedCornerShape(24.dp))
+                            .border(1.dp, GlassBorder, RoundedCornerShape(24.dp))
+                            .padding(20.dp)
+                    ) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "إضافة مهمة أتمتة ذكية",
+                                color = MetallicGold,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            OutlinedTextField(
+                                value = newTaskTitle,
+                                onValueChange = { newTaskTitle = it },
+                                label = { Text("عنوان المهمة", color = TextGray) },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = TextSilver,
+                                    unfocusedTextColor = TextSilver,
+                                    focusedBorderColor = MetallicGold,
+                                    unfocusedBorderColor = GlassBorder
+                                )
+                            )
+
+                            Text("نوع المهمة:", color = TextSilver, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Row(
+                                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                val types = listOf("تحليل ذكي", "كتابة كود", "أتمتة أوامر", "فحص كشوفات")
+                                types.forEach { type ->
+                                    val isSelected = newTaskType == type
+                                    Box(
+                                        modifier = Modifier
+                                            .background(if (isSelected) GoldGlassBg else CardSlateBg, RoundedCornerShape(8.dp))
+                                            .border(1.dp, if (isSelected) MetallicGold else GlassBorder, RoundedCornerShape(8.dp))
+                                            .clickable { newTaskType = type }
+                                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(type, color = if (isSelected) MetallicGold else TextGray, fontSize = 10.sp)
+                                    }
+                                }
+                            }
+
+                            OutlinedTextField(
+                                value = newTaskCommand,
+                                onValueChange = { newTaskCommand = it },
+                                label = { Text("الأمر البرمجي (اختياري)", color = TextGray) },
+                                placeholder = { Text("مثال: @treedoc", color = TextMuted) },
+                                modifier = Modifier.fillMaxWidth().height(80.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = TextSilver,
+                                    unfocusedTextColor = TextSilver,
+                                    focusedBorderColor = MetallicGold,
+                                    unfocusedBorderColor = GlassBorder
+                                )
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        if (newTaskTitle.isNotBlank()) {
+                                            viewModel.addAiTask(newTaskTitle, newTaskType, newTaskCommand.takeIf { it.isNotBlank() })
+                                            showAddTaskDialog = false
+                                            newTaskTitle = ""
+                                            newTaskCommand = ""
+                                        } else {
+                                            Toast.makeText(context, "يرجى كتابة عنوان للمهمة", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MetallicGold, contentColor = SlateBg),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("إضافة للطابور", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                }
+
+                                Button(
+                                    onClick = { showAddTaskDialog = false },
+                                    colors = ButtonDefaults.buttonColors(containerColor = CardSlateBg, contentColor = TextSilver),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("إلغاء", fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (selectedTaskDetail != null) {
+                val task = selectedTaskDetail!!
+                Dialog(onDismissRequest = { selectedTaskDetail = null }) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(SlateBg, RoundedCornerShape(24.dp))
+                            .border(1.dp, GlassBorder, RoundedCornerShape(24.dp))
+                            .padding(20.dp)
+                    ) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "سجل تفاصيل المهمة الذكية",
+                                    color = MetallicGold,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .background(GoldGlassBg, RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                                ) {
+                                    Text(task.status, color = MetallicGold, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            Text("العنوان: ${task.title}", color = TextSilver, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("النوع: ${task.type}", color = TextGray, fontSize = 10.sp)
+                            if (!task.command.isNullOrBlank()) {
+                                Text("الأمر المرفق: ${task.command}", color = TextGray, fontSize = 10.sp)
+                            }
+
+                            Divider(color = GlassBorder.copy(alpha = 0.3f))
+
+                            Text("سجل المخرجات المباشر (Execution Log):", color = TextSilver, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(180.dp)
+                                    .background(CardSlateBg, RoundedCornerShape(12.dp))
+                                    .border(1.dp, GlassBorder, RoundedCornerShape(12.dp))
+                                    .padding(10.dp)
+                                    .verticalScroll(rememberScrollState())
+                            ) {
+                                Text(
+                                    text = task.logs.ifBlank { "لا توجد سجلات بعد للمهمة الحالية." },
+                                    color = TextSilver,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 9.sp
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Task Logs", task.logs))
+                                        Toast.makeText(context, "📋 تم نسخ سجل المخرجات!", Toast.LENGTH_SHORT).show()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = CardSlateBg, contentColor = TextSilver),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("نسخ السجل", fontSize = 11.sp)
+                                }
+
+                                Button(
+                                    onClick = { selectedTaskDetail = null },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MetallicGold, contentColor = SlateBg),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("إغلاق", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (editingClipboardLog != null) {
+                val log = editingClipboardLog!!
+                Dialog(onDismissRequest = { editingClipboardLog = null }) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(SlateBg, RoundedCornerShape(24.dp))
+                            .border(1.dp, GlassBorder, RoundedCornerShape(24.dp))
+                            .padding(20.dp)
+                    ) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "تعديل نص الحافظة الملتقط",
+                                color = MetallicGold,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            OutlinedTextField(
+                                value = editingClipboardText,
+                                onValueChange = { editingClipboardText = it },
+                                modifier = Modifier.fillMaxWidth().height(160.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = TextSilver,
+                                    unfocusedTextColor = TextSilver,
+                                    focusedBorderColor = MetallicGold,
+                                    unfocusedBorderColor = GlassBorder
+                                )
+                            )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val updatedLog = log.copy(details = editingClipboardText)
+                                viewModel.deleteLogById(log.id)
+                                viewModel.updateLog(updatedLog)
+                                editingClipboardLog = null
+                                Toast.makeText(context, "✅ تم حفظ التعديلات بنجاح!", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MetallicGold, contentColor = SlateBg),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("حفظ التغييرات", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        }
+
+                        Button(
+                            onClick = { editingClipboardLog = null },
+                            colors = ButtonDefaults.buttonColors(containerColor = CardSlateBg, contentColor = TextSilver),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("إلغاء", fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
         // Live Event Logs List (سجل الأحداث)
         item {
             val smartPrefs = remember(context) { context.getSharedPreferences("SmartPrefs", Context.MODE_PRIVATE) }
@@ -1249,7 +2232,8 @@ fun MonitorScreen(viewModel: MainViewModel) {
 
             // Apply filtering and sorting dynamically
             val filteredLogs = remember(
-                eventLogs, selectedLimit, selectedTypeFilter, selectedSeverityFilter, sortNewestFirst, editedLogsMap
+                eventLogs, selectedLimit, selectedTypeFilter, selectedSeverityFilter, sortNewestFirst, editedLogsMap,
+                selectedDurationFilter, selectedSourceFilter, searchLogQuery
             ) {
                 var list = eventLogs.filter { log ->
                     val matchesType = when (selectedTypeFilter) {
@@ -1270,7 +2254,34 @@ fun MonitorScreen(viewModel: MainViewModel) {
                         else -> true
                     }
 
-                    matchesType && matchesSeverity
+                    val currentTime = System.currentTimeMillis()
+                    val matchesDuration = when (selectedDurationFilter) {
+                        "الكل" -> true
+                        "آخر ساعة" -> (currentTime - log.timestamp) <= 3600_000L
+                        "آخر 24 ساعة" -> (currentTime - log.timestamp) <= 86400_000L
+                        "آخر 7 أيام" -> (currentTime - log.timestamp) <= 7 * 86400_000L
+                        else -> true
+                    }
+
+                    val matchesSource = when (selectedSourceFilter) {
+                        "الكل" -> true
+                        "🫧 الفقاعة الذهبية" -> log.source == "bubble"
+                        "⌨️ لوحة المفاتيح IME" -> log.source == "ime"
+                        "🟢 تلقائي" -> log.source == "auto"
+                        "✍️ يدوي" -> log.source == "manual"
+                        "📦 حزمة البناء" -> log.source == "buildpack"
+                        "🧠 الالتقاط الذكي" -> log.source == "smartcapture"
+                        else -> true
+                    }
+
+                    val matchesSearch = if (searchLogQuery.isBlank()) {
+                        true
+                    } else {
+                        log.message.contains(searchLogQuery, ignoreCase = true) ||
+                                detail.contains(searchLogQuery, ignoreCase = true)
+                    }
+
+                    matchesType && matchesSeverity && matchesDuration && matchesSource && matchesSearch
                 }
 
                 list = if (sortNewestFirst) {
@@ -1279,7 +2290,7 @@ fun MonitorScreen(viewModel: MainViewModel) {
                     list.sortedBy { it.timestamp }
                 }
 
-                val limit = if (selectedLimit == 10) 10 else if (selectedLimit == 20) 20 else if (selectedLimit == 50) 50 else 9999
+                val limit = if (selectedLimit == 9999) 9999 else selectedLimit
                 if (limit < 9999) {
                     list.take(limit)
                 } else {
@@ -1371,6 +2382,206 @@ fun MonitorScreen(viewModel: MainViewModel) {
 
                 Spacer(modifier = Modifier.height(12.dp))
 
+                // --- PREMIUM EVENT LOGS ANALYSIS DASHBOARD ---
+                val totalCount = eventLogs.size
+                val failCount = eventLogs.count { log ->
+                    val detail = editedLogsMap[log.id] ?: log.details ?: ""
+                    log.message.contains("❌") || log.message.contains("فشل") || detail.contains("❌") || detail.contains("فشل")
+                }
+                val successCount = totalCount - failCount
+                val healthPercentage = if (totalCount > 0) ((successCount.toFloat() / totalCount.toFloat()) * 100).toInt() else 100
+                
+                // Group by type to find most active source
+                val typesList = eventLogs.map { it.type }
+                val mostActiveType = if (typesList.isNotEmpty()) {
+                    typesList.groupBy { it }.maxByOrNull { it.value.size }?.key ?: "system"
+                } else "system"
+                
+                val mostActiveLabel = when (mostActiveType) {
+                    "builder" -> "منظم المجلد"
+                    "executor" -> "محرك الأوامر"
+                    "treedoc" -> "مستكشف الملفات"
+                    "gemini" -> "الذكاء الاصطناعي"
+                    "clipboard_service", "clipboard_history" -> "الحافظة"
+                    else -> "النظام"
+                }
+
+                // Color codes
+                val builderColor = Color(0xFF60A5FA)
+                val executorColor = Color(0xFFFBBF24)
+                val geminiColor = Color(0xFFA78BFA)
+                val clipboardColor = Color(0xFF34D399)
+                val systemColor = Color(0xFF9CA3AF)
+
+                // Sub-counts for visual progress bar
+                val builderC = eventLogs.count { it.type == "builder" || it.type == "treedoc" }
+                val executorC = eventLogs.count { it.type == "executor" }
+                val geminiC = eventLogs.count { it.type == "gemini" }
+                val clipboardC = eventLogs.count { it.type == "clipboard_service" || it.type == "clipboard_history" }
+                val systemC = totalCount - builderC - executorC - geminiC - clipboardC
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(SlateBg.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                        .border(1.dp, GlassBorder.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+                        .padding(12.dp)
+                ) {
+                    // Row 1: Metrics
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                            Text("السجلات", color = TextMuted, fontSize = 9.sp)
+                            Text("$totalCount", color = TextSilver, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                            Text("معدل النجاح", color = TextMuted, fontSize = 9.sp)
+                            Text("$healthPercentage%", color = if (healthPercentage >= 90) EmeraldGlow else DangerRed, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                            Text("الفشل", color = TextMuted, fontSize = 9.sp)
+                            Text("$failCount", color = if (failCount > 0) DangerRed else TextSilver, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1.3f)) {
+                            Text("النشاط الأكبر", color = TextMuted, fontSize = 9.sp)
+                            Text(mostActiveLabel, color = MetallicGold, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Segmented horizontal distribution bar
+                    if (totalCount > 0) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(CircleShape)
+                                .background(CardSlateBg)
+                        ) {
+                            if (builderC > 0) {
+                                Box(modifier = Modifier.weight(builderC.toFloat()).fillMaxHeight().background(builderColor))
+                            }
+                            if (executorC > 0) {
+                                Box(modifier = Modifier.weight(executorC.toFloat()).fillMaxHeight().background(executorColor))
+                            }
+                            if (geminiC > 0) {
+                                Box(modifier = Modifier.weight(geminiC.toFloat()).fillMaxHeight().background(geminiColor))
+                            }
+                            if (clipboardC > 0) {
+                                Box(modifier = Modifier.weight(clipboardC.toFloat()).fillMaxHeight().background(clipboardColor))
+                            }
+                            if (systemC > 0) {
+                                Box(modifier = Modifier.weight(systemC.toFloat()).fillMaxHeight().background(systemColor))
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Legends with counts
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            if (builderC > 0) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Box(modifier = Modifier.size(6.dp).background(builderColor, CircleShape))
+                                    Text("مجلد ($builderC)", color = TextMuted, fontSize = 8.sp)
+                                }
+                            }
+                            if (executorC > 0) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Box(modifier = Modifier.size(6.dp).background(executorColor, CircleShape))
+                                    Text("أوامر ($executorC)", color = TextMuted, fontSize = 8.sp)
+                                }
+                            }
+                            if (geminiC > 0) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Box(modifier = Modifier.size(6.dp).background(geminiColor, CircleShape))
+                                    Text("ذكاء ($geminiC)", color = TextMuted, fontSize = 8.sp)
+                                }
+                            }
+                            if (clipboardC > 0) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Box(modifier = Modifier.size(6.dp).background(clipboardColor, CircleShape))
+                                    Text("حافظة ($clipboardC)", color = TextMuted, fontSize = 8.sp)
+                                }
+                            }
+                            if (systemC > 0) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Box(modifier = Modifier.size(6.dp).background(systemColor, CircleShape))
+                                    Text("نظام ($systemC)", color = TextMuted, fontSize = 8.sp)
+                                }
+                            }
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(CircleShape)
+                                .background(CardSlateBg)
+                        )
+                    }
+
+                    // Dynamic Warning Alert inside Dashboard
+                    val lastHourFail = remember(eventLogs) {
+                        eventLogs.any { log ->
+                            val isRecent = (System.currentTimeMillis() - log.timestamp) <= 3600_000L
+                            val detail = editedLogsMap[log.id] ?: log.details ?: ""
+                            isRecent && (log.message.contains("❌") || log.message.contains("فشل") || detail.contains("❌") || detail.contains("فشل"))
+                        }
+                    }
+                    if (lastHourFail) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0x15EF4444), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = DangerRed, modifier = Modifier.size(10.dp))
+                            Text("تنبيه نشط: تم رصد فشل في العمليات خلال الساعة الأخيرة!", color = DangerRed, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Search Input Field
+                OutlinedTextField(
+                    value = searchLogQuery,
+                    onValueChange = { searchLogQuery = it },
+                    placeholder = { Text("ابحث في رسائل السجلات وتفاصيلها...", color = TextMuted, fontSize = 11.sp) },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MetallicGold, modifier = Modifier.size(16.dp)) },
+                    trailingIcon = {
+                        if (searchLogQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchLogQuery = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear", tint = TextMuted, modifier = Modifier.size(14.dp))
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(46.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = TextSilver,
+                        unfocusedTextColor = TextSilver,
+                        focusedBorderColor = MetallicGold,
+                        unfocusedBorderColor = GlassBorder,
+                        focusedContainerColor = CardSlateBg.copy(alpha = 0.4f),
+                        unfocusedContainerColor = CardSlateBg.copy(alpha = 0.4f)
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
                 // Filters Pane in styled glass containers
                 Text("تصفية وفلترة الأحداث:", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(6.dp))
@@ -1388,7 +2599,7 @@ fun MonitorScreen(viewModel: MainViewModel) {
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            listOf(10, 20, 50, 9999).forEach { limit ->
+                            listOf(10, 25, 50, 100, 9999).forEach { limit ->
                                 val isSelected = selectedLimit == limit
                                 Box(
                                     modifier = Modifier
@@ -1445,7 +2656,7 @@ fun MonitorScreen(viewModel: MainViewModel) {
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // 2. TYPE Filter Row
+                // 2. TYPE & DURATION & SOURCE filters in multi-level scrollable row
                 Text("نوع العمليات:", color = TextGray, fontSize = 9.sp)
                 Spacer(modifier = Modifier.height(4.dp))
                 LazyRow(
@@ -1466,6 +2677,66 @@ fun MonitorScreen(viewModel: MainViewModel) {
                         ) {
                             Text(
                                 text = type,
+                                color = if (isSelected) SlateBg else TextSilver,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text("المدة الزمنية:", color = TextGray, fontSize = 9.sp)
+                Spacer(modifier = Modifier.height(4.dp))
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(listOf("الكل", "آخر ساعة", "آخر 24 ساعة", "آخر 7 أيام")) { dur ->
+                        val isSelected = selectedDurationFilter == dur
+                        Box(
+                            modifier = Modifier
+                                .height(26.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) MetallicGold else GlassWhite)
+                                .clickable { selectedDurationFilter = dur }
+                                .border(1.dp, if (isSelected) MetallicGold else GlassBorder, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = dur,
+                                color = if (isSelected) SlateBg else TextSilver,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text("مصدر المعالجة:", color = TextGray, fontSize = 9.sp)
+                Spacer(modifier = Modifier.height(4.dp))
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(listOf("الكل", "🫧 الفقاعة الذهبية", "⌨️ لوحة المفاتيح IME", "🟢 تلقائي", "✍️ يدوي", "📦 حزمة البناء", "🧠 الالتقاط الذكي")) { src ->
+                        val isSelected = selectedSourceFilter == src
+                        Box(
+                            modifier = Modifier
+                                .height(26.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) MetallicGold else GlassWhite)
+                                .clickable { selectedSourceFilter = src }
+                                .border(1.dp, if (isSelected) MetallicGold else GlassBorder, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = src,
                                 color = if (isSelected) SlateBg else TextSilver,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold
@@ -1592,6 +2863,269 @@ fun MonitorScreen(viewModel: MainViewModel) {
                             modifier = Modifier.padding(bottom = 6.dp)
                         )
 
+                        // Expandable Advanced Export Settings
+                        var showAdvancedExportSettings by remember { mutableStateOf(false) }
+                        
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showAdvancedExportSettings = !showAdvancedExportSettings }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (showAdvancedExportSettings) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                contentDescription = null,
+                                tint = MetallicGold,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "خيارات التنسيق المتقدمة للتصدير والحفظ",
+                                color = MetallicGold,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        
+                        if (showAdvancedExportSettings) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(CardSlateBg.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                    .padding(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // 1. Toggle Include Details
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("تضمين تفاصيل العمليات:", color = TextSilver, fontSize = 9.sp)
+                                    Switch(
+                                        checked = exportIncludeDetails,
+                                        onCheckedChange = { exportIncludeDetails = it },
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = SlateBg,
+                                            checkedTrackColor = MetallicGold,
+                                            uncheckedThumbColor = TextGray,
+                                            uncheckedTrackColor = GlassWhite
+                                        ),
+                                        modifier = Modifier.scale(0.7f).height(24.dp)
+                                    )
+                                }
+                                
+                                // 2. Toggle Anonymize
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("تصفية وتعمية البيانات الحساسة (مفاتيح API، البريد):", color = TextSilver, fontSize = 9.sp)
+                                    Switch(
+                                        checked = exportAnonymizeSensitive,
+                                        onCheckedChange = { exportAnonymizeSensitive = it },
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = SlateBg,
+                                            checkedTrackColor = MetallicGold,
+                                            uncheckedThumbColor = TextGray,
+                                            uncheckedTrackColor = GlassWhite
+                                        ),
+                                        modifier = Modifier.scale(0.7f).height(24.dp)
+                                    )
+                                }
+                                
+                                // 3. HTML Theme Selector
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Text("نمط مظهر تقرير HTML التفاعلي:", color = TextSilver, fontSize = 9.sp)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        listOf(
+                                            Pair("dark", "داكن كوني"),
+                                            Pair("light", "مشرق فضي"),
+                                            Pair("gold", "ذهبي فاخر")
+                                        ).forEach { (themeKey, themeLabel) ->
+                                            val isSelected = exportHtmlTheme == themeKey
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(24.dp)
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(if (isSelected) MetallicGold else CardSlateBg)
+                                                    .clickable { exportHtmlTheme = themeKey }
+                                                    .border(1.dp, if (isSelected) MetallicGold else GlassBorder, RoundedCornerShape(6.dp)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = themeLabel,
+                                                    color = if (isSelected) SlateBg else TextSilver,
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // 4. Toggle Target Save Directory
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Text("مكان حفظ الملف المصدر:", color = TextSilver, fontSize = 9.sp)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        listOf(
+                                            Pair(true, "المجلد المختار في الإعدادات"),
+                                            Pair(false, "مجلد التطبيق الافتراضي")
+                                        ).forEach { (isSettingsDir, label) ->
+                                            val isSelected = exportToSettingsDir == isSettingsDir
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(24.dp)
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(if (isSelected) MetallicGold else CardSlateBg)
+                                                    .clickable { exportToSettingsDir = isSettingsDir }
+                                                    .border(1.dp, if (isSelected) MetallicGold else GlassBorder, RoundedCornerShape(6.dp)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = label,
+                                                    color = if (isSelected) SlateBg else TextSilver,
+                                                    fontSize = 8.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    val currentPathLabel = if (exportToSettingsDir) viewModel.baseDirSetting.collectAsState().value else context.getExternalFilesDir(null)?.absolutePath ?: ""
+                                    Text(
+                                        text = "مسار الحفظ: $currentPathLabel",
+                                        color = TextMuted,
+                                        fontSize = 8.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    // 5. Custom Formatting selectors (TXT, CSV, JSON)
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        Text("نمط وصيغة مخرجات TXT:", color = TextSilver, fontSize = 9.sp)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            listOf(
+                                                Pair("detailed", "تفصيلي"),
+                                                Pair("simple", "مبسط"),
+                                                Pair("markdown", "Markdown 📝")
+                                            ).forEach { (styleKey, styleLabel) ->
+                                                val isSelected = exportTxtStyle == styleKey
+                                                Box(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .height(24.dp)
+                                                        .clip(RoundedCornerShape(6.dp))
+                                                        .background(if (isSelected) MetallicGold else CardSlateBg)
+                                                        .clickable { exportTxtStyle = styleKey }
+                                                        .border(1.dp, if (isSelected) MetallicGold else GlassBorder, RoundedCornerShape(6.dp)),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = styleLabel,
+                                                        color = if (isSelected) SlateBg else TextSilver,
+                                                        fontSize = 8.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(6.dp))
+
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        Text("فاصل مخرجات CSV (الجدولية):", color = TextSilver, fontSize = 9.sp)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            listOf(
+                                                Pair(",", "فاصلة ( , )"),
+                                                Pair(";", "منقوطة ( ; )"),
+                                                Pair("tab", "علامة Tab ⇥")
+                                            ).forEach { (delimKey, delimLabel) ->
+                                                val isSelected = exportCsvDelimiter == delimKey
+                                                Box(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .height(24.dp)
+                                                        .clip(RoundedCornerShape(6.dp))
+                                                        .background(if (isSelected) MetallicGold else CardSlateBg)
+                                                        .clickable { exportCsvDelimiter = delimKey }
+                                                        .border(1.dp, if (isSelected) MetallicGold else GlassBorder, RoundedCornerShape(6.dp)),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = delimLabel,
+                                                        color = if (isSelected) SlateBg else TextSilver,
+                                                        fontSize = 8.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(6.dp))
+
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        Text("تنسيق ومسافات JSON:", color = TextSilver, fontSize = 9.sp)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            listOf(
+                                                Pair(4, "مسافة بادئة (4)"),
+                                                Pair(2, "مسافة بادئة (2)"),
+                                                Pair(0, "مضغوط (Compact)")
+                                             ).forEach { (indentKey, indentLabel) ->
+                                                 val isSelected = exportJsonIndent == indentKey
+                                                 Box(
+                                                     modifier = Modifier
+                                                         .weight(1f)
+                                                         .height(24.dp)
+                                                         .clip(RoundedCornerShape(6.dp))
+                                                         .background(if (isSelected) MetallicGold else CardSlateBg)
+                                                         .clickable { exportJsonIndent = indentKey }
+                                                         .border(1.dp, if (isSelected) MetallicGold else GlassBorder, RoundedCornerShape(6.dp)),
+                                                     contentAlignment = Alignment.Center
+                                                 ) {
+                                                     Text(
+                                                         text = indentLabel,
+                                                         color = if (isSelected) SlateBg else TextSilver,
+                                                         fontSize = 8.sp,
+                                                         fontWeight = FontWeight.Bold
+                                                     )
+                                                 }
+                                             }
+                                         }
+                                     }
+                                 }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+
                         // 1. Copy & Share Rows
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
@@ -1599,7 +3133,13 @@ fun MonitorScreen(viewModel: MainViewModel) {
                         ) {
                             Button(
                                 onClick = {
-                                    val logText = AppReportHelper.generateTxtReport(activeSelectedLogs, editedLogsMap)
+                                    val logText = AppReportHelper.generateTxtReport(
+                                        activeSelectedLogs, 
+                                        editedLogsMap,
+                                        includeDetails = exportIncludeDetails,
+                                        anonymize = exportAnonymizeSensitive,
+                                        style = exportTxtStyle
+                                    )
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                                     clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Event Logs", logText))
                                     Toast.makeText(context, "📋 تم نسخ سجل المخرجات التام!", Toast.LENGTH_SHORT).show()
@@ -1620,7 +3160,13 @@ fun MonitorScreen(viewModel: MainViewModel) {
 
                             Button(
                                 onClick = {
-                                    val text = AppReportHelper.generateTxtReport(activeSelectedLogs, editedLogsMap)
+                                    val text = AppReportHelper.generateTxtReport(
+                                        activeSelectedLogs, 
+                                        editedLogsMap,
+                                        includeDetails = exportIncludeDetails,
+                                        anonymize = exportAnonymizeSensitive,
+                                        style = exportTxtStyle
+                                    )
                                     val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                         type = "text/plain"
                                         putExtra(Intent.EXTRA_TEXT, text)
@@ -1651,8 +3197,15 @@ fun MonitorScreen(viewModel: MainViewModel) {
                         ) {
                             Button(
                                 onClick = {
-                                    val html = AppReportHelper.generateInteractiveHtmlReport(activeSelectedLogs, editedLogsMap)
-                                    AppReportHelper.saveAndOpenHtmlReport(context, html)
+                                    val html = AppReportHelper.generateInteractiveHtmlReport(
+                                        activeSelectedLogs, 
+                                        editedLogsMap,
+                                        theme = exportHtmlTheme,
+                                        includeDetails = exportIncludeDetails,
+                                        anonymize = exportAnonymizeSensitive
+                                    )
+                                    val saveDir = if (exportToSettingsDir) File(viewModel.baseDirSetting.value) else null
+                                    AppReportHelper.saveAndOpenHtmlReport(context, html, saveDir)
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = MetallicGold, contentColor = SlateBg),
                                 shape = RoundedCornerShape(8.dp),
@@ -1671,18 +3224,37 @@ fun MonitorScreen(viewModel: MainViewModel) {
                             listOf("TXT", "CSV", "JSON").forEach { fmt ->
                                 Button(
                                     onClick = {
+                                        val saveDir = if (exportToSettingsDir) File(viewModel.baseDirSetting.value) else null
                                         when (fmt) {
                                             "TXT" -> {
-                                                val txt = AppReportHelper.generateTxtReport(activeSelectedLogs, editedLogsMap)
-                                                AppReportHelper.saveAndShareFile(context, txt, "logs_export.txt", "text/plain")
+                                                val txt = AppReportHelper.generateTxtReport(
+                                                    activeSelectedLogs, 
+                                                    editedLogsMap,
+                                                    includeDetails = exportIncludeDetails,
+                                                    anonymize = exportAnonymizeSensitive,
+                                                    style = exportTxtStyle
+                                                )
+                                                AppReportHelper.saveAndShareFile(context, txt, "logs_export.txt", "text/plain", saveDir)
                                             }
                                             "CSV" -> {
-                                                val csv = AppReportHelper.generateCsvReport(activeSelectedLogs, editedLogsMap)
-                                                AppReportHelper.saveAndShareFile(context, csv, "logs_export.csv", "text/csv")
+                                                val csv = AppReportHelper.generateCsvReport(
+                                                    activeSelectedLogs, 
+                                                    editedLogsMap,
+                                                    includeDetails = exportIncludeDetails,
+                                                    anonymize = exportAnonymizeSensitive,
+                                                    delimiter = exportCsvDelimiter
+                                                )
+                                                AppReportHelper.saveAndShareFile(context, csv, "logs_export.csv", "text/csv", saveDir)
                                             }
                                             "JSON" -> {
-                                                val json = AppReportHelper.generateJsonReport(activeSelectedLogs, editedLogsMap)
-                                                AppReportHelper.saveAndShareFile(context, json, "logs_export.json", "application/json")
+                                                val json = AppReportHelper.generateJsonReport(
+                                                    activeSelectedLogs, 
+                                                    editedLogsMap,
+                                                    includeDetails = exportIncludeDetails,
+                                                    anonymize = exportAnonymizeSensitive,
+                                                    indent = exportJsonIndent
+                                                )
+                                                AppReportHelper.saveAndShareFile(context, json, "logs_export.json", "application/json", saveDir)
                                             }
                                         }
                                     },
@@ -1758,9 +3330,38 @@ fun MonitorScreen(viewModel: MainViewModel) {
                             val isSelected = selectedLogIds.contains(log.id)
                             val finalDetails = editedLogsMap[log.id] ?: log.details ?: ""
                             
+                            val sourceColor = when (log.source) {
+                                "bubble" -> Color(0xFFD97706)
+                                "ime" -> Color(0xFF3B82F6)
+                                "auto" -> Color(0xFF10B981)
+                                "manual" -> Color(0xFF8B5CF6)
+                                "buildpack" -> Color(0xFFF59E0B)
+                                "smartcapture" -> Color(0xFFEC4899)
+                                else -> Color(0xFF10B981)
+                            }
+                            val sourceIcon = when (log.source) {
+                                "bubble" -> "🫧"
+                                "ime" -> "⌨️"
+                                "auto" -> "🟢"
+                                "manual" -> "✍️"
+                                "buildpack" -> "📦"
+                                "smartcapture" -> "🧠"
+                                else -> "🟢"
+                            }
+                            val sourceName = when (log.source) {
+                                "bubble" -> "الفقاعة الذهبية"
+                                "ime" -> "لوحة المفاتيح IME"
+                                "auto" -> "تلقائي"
+                                "manual" -> "يدوي"
+                                "buildpack" -> "حزمة البناء"
+                                "smartcapture" -> "الالتقاط الذكي"
+                                else -> "تلقائي"
+                            }
+
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .height(IntrinsicSize.Min)
                                     .background(
                                         if (isMultiSelectMode && isSelected) GoldGlassBg else GlassWhite,
                                         RoundedCornerShape(14.dp)
@@ -1775,114 +3376,184 @@ fun MonitorScreen(viewModel: MainViewModel) {
                                             selectedLogIds = if (isSelected) selectedLogIds - log.id else selectedLogIds + log.id
                                         }
                                     }
-                                    .padding(10.dp)
                             ) {
                                 Row(
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    modifier = Modifier.fillMaxSize(),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    // Checkbox if multi select mode is on
-                                    if (isMultiSelectMode) {
-                                        Checkbox(
-                                            checked = isSelected,
-                                            onCheckedChange = { checked ->
-                                                selectedLogIds = if (checked) selectedLogIds + log.id else selectedLogIds - log.id
-                                            },
-                                            colors = CheckboxDefaults.colors(
-                                                checkedColor = MetallicGold,
-                                                checkmarkColor = SlateBg,
-                                                uncheckedColor = TextGray
-                                            ),
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                    }
-
-                                    // Type Icon badge
+                                    // Left Border indicator bar colored with source color
                                     Box(
                                         modifier = Modifier
-                                            .size(28.dp)
-                                            .background(
-                                                when (log.type) {
-                                                    "builder" -> Color(0x203B82F6)
-                                                    "executor" -> Color(0x20F59E0B)
-                                                    "treedoc" -> Color(0x2084CC16)
-                                                    "gemini" -> Color(0x208B5CF6)
-                                                    else -> GoldGlassBg
-                                                },
-                                                CircleShape
-                                            ),
-                                        contentAlignment = Alignment.Center
+                                            .fillMaxHeight()
+                                            .width(5.dp)
+                                            .background(sourceColor, RoundedCornerShape(topStart = 14.dp, bottomStart = 14.dp))
+                                    )
+                                    
+                                    Row(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(10.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Icon(
-                                            imageVector = when (log.type) {
-                                                "builder" -> Icons.Default.Create
-                                                "executor" -> Icons.Default.PlayArrow
-                                                "treedoc" -> Icons.Default.List
-                                                "gemini" -> Icons.Default.Star
-                                                else -> Icons.Default.Info
-                                            },
-                                            contentDescription = null,
-                                            tint = when (log.type) {
-                                                "builder" -> Color(0xFF60A5FA)
-                                                "executor" -> Color(0xFFFBBF24)
-                                                "treedoc" -> Color(0xFFA3E635)
-                                                "gemini" -> Color(0xFFA78BFA)
-                                                else -> MetallicGold
-                                            },
-                                            modifier = Modifier.size(12.dp)
-                                        )
-                                    }
-
-                                    val isFailedLog = log.message.contains("❌") || log.message.contains("فشل") || finalDetails.contains("❌") || finalDetails.contains("فشل")
-                                    val textColor = if (isFailedLog) DangerRed else TextSilver
-                                    val detailsColor = if (isFailedLog) DangerRed.copy(alpha = 0.8f) else TextGray
-
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = log.message,
-                                                color = textColor,
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.weight(1f)
-                                            )
-                                            
-                                            // ✏️ Edit Action Button
-                                            IconButton(
-                                                onClick = {
-                                                    editingLogForDetails = log
-                                                    editingLogTextState = finalDetails
+                                        // Checkbox if multi select mode is on
+                                        if (isMultiSelectMode) {
+                                            Checkbox(
+                                                checked = isSelected,
+                                                onCheckedChange = { checked ->
+                                                    selectedLogIds = if (checked) selectedLogIds + log.id else selectedLogIds - log.id
                                                 },
+                                                colors = CheckboxDefaults.colors(
+                                                    checkedColor = MetallicGold,
+                                                    checkmarkColor = SlateBg,
+                                                    uncheckedColor = TextGray
+                                                ),
                                                 modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+
+                                        // Type Icon badge
+                                        Box(
+                                            modifier = Modifier
+                                                .size(28.dp)
+                                                .background(
+                                                    when (log.type) {
+                                                        "builder" -> Color(0x203B82F6)
+                                                        "executor" -> Color(0x20F59E0B)
+                                                        "treedoc" -> Color(0x2084CC16)
+                                                        "gemini" -> Color(0x208B5CF6)
+                                                        else -> GoldGlassBg
+                                                    },
+                                                    CircleShape
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = when (log.type) {
+                                                    "builder" -> Icons.Default.Create
+                                                    "executor" -> Icons.Default.PlayArrow
+                                                    "treedoc" -> Icons.Default.List
+                                                    "gemini" -> Icons.Default.Star
+                                                    else -> Icons.Default.Info
+                                                },
+                                                contentDescription = null,
+                                                tint = when (log.type) {
+                                                    "builder" -> Color(0xFF60A5FA)
+                                                    "executor" -> Color(0xFFFBBF24)
+                                                    "treedoc" -> Color(0xFFA3E635)
+                                                    "gemini" -> Color(0xFFA78BFA)
+                                                    else -> MetallicGold
+                                                },
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                        }
+
+                                        val isFailedLog = log.message.contains("❌") || log.message.contains("فشل") || finalDetails.contains("❌") || finalDetails.contains("فشل")
+                                        val textColor = if (isFailedLog) DangerRed else TextSilver
+                                        val detailsColor = if (isFailedLog) DangerRed.copy(alpha = 0.8f) else TextGray
+
+                                        val foundPath = remember(log.message, finalDetails) {
+                                            findExistingFilePath(context, log.message + " " + finalDetails)
+                                        }
+
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            // Source indicator tag inside card
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
                                             ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Edit,
-                                                    contentDescription = "Edit event description",
-                                                    tint = MetallicGold.copy(alpha = 0.8f),
-                                                    modifier = Modifier.size(12.dp)
+                                                Text(
+                                                    text = sourceIcon,
+                                                    fontSize = 10.sp
+                                                )
+                                                Text(
+                                                    text = "المصدر: $sourceName",
+                                                    color = sourceColor,
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold
                                                 )
                                             }
-                                        }
-                                        if (finalDetails.isNotBlank()) {
-                                            Text(
-                                                text = finalDetails,
-                                                color = detailsColor,
-                                                fontSize = 10.sp,
-                                                maxLines = 3,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-                                    }
+                                            Spacer(modifier = Modifier.height(2.dp))
 
-                                    Text(
-                                        text = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(log.timestamp)),
-                                        color = TextMuted,
-                                        fontSize = 9.sp
-                                    )
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = log.message,
+                                                    color = textColor,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                
+                                                // ✏️ Edit Action Button
+                                                IconButton(
+                                                    onClick = {
+                                                        editingLogForDetails = log
+                                                        editingLogTextState = finalDetails
+                                                    },
+                                                    modifier = Modifier.size(24.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Edit,
+                                                        contentDescription = "Edit event description",
+                                                        tint = MetallicGold.copy(alpha = 0.8f),
+                                                        modifier = Modifier.size(12.dp)
+                                                    )
+                                                }
+                                            }
+                                            if (finalDetails.isNotBlank()) {
+                                                Text(
+                                                    text = finalDetails,
+                                                    color = detailsColor,
+                                                    fontSize = 10.sp,
+                                                    maxLines = 3,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+
+                                            if (foundPath != null) {
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Row(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(6.dp))
+                                                        .background(MetallicGold.copy(alpha = 0.15f))
+                                                        .clickable {
+                                                            try {
+                                                                com.example.engine.FileUtils.openFile(context, foundPath)
+                                                            } catch (e: Exception) {
+                                                                Toast.makeText(context, "لا يمكن فتح الملف: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                                            }
+                                                        }
+                                                        .border(0.5.dp, MetallicGold, RoundedCornerShape(6.dp))
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.List,
+                                                        contentDescription = null,
+                                                        tint = MetallicGold,
+                                                        modifier = Modifier.size(10.dp)
+                                                    )
+                                                    Text(
+                                                        text = "فتح الملف المرتبط: ${File(foundPath).name} ↗",
+                                                        color = BrightGold,
+                                                        fontSize = 8.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Text(
+                                            text = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(log.timestamp)),
+                                            color = TextMuted,
+                                            fontSize = 9.sp
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -2001,51 +3672,279 @@ fun MonitorScreen(viewModel: MainViewModel) {
     // Interactive Inline File Editor Dialog
     if (showFileEditorDialog && editingFileEntity != null) {
         Dialog(onDismissRequest = { showFileEditorDialog = false }) {
+            var fileSearchQuery by remember { mutableStateOf("") }
+            val linesCount = remember(editingFileContent) { editingFileContent.lines().size }
+            val wordsCount = remember(editingFileContent) { editingFileContent.split(Regex("\\s+")).filter { it.isNotBlank() }.size }
+            val charsCount = remember(editingFileContent) { editingFileContent.length }
+            val searchMatchesCount = remember(editingFileContent, fileSearchQuery) {
+                if (fileSearchQuery.isBlank()) 0 else {
+                    val matches = Regex(Regex.escape(fileSearchQuery), RegexOption.IGNORE_CASE).findAll(editingFileContent)
+                    matches.count()
+                }
+            }
+            
+            val openFileInExternalApp = {
+                try {
+                    val entity = editingFileEntity!!
+                    val file = File(entity.fullPath)
+                    if (file.exists()) {
+                        val authority = "${context.packageName}.fileprovider"
+                        val uri = FileProvider.getUriForFile(context, authority, file)
+                        val mimeType = when (file.extension.lowercase(Locale.ROOT)) {
+                            "html", "htm" -> "text/html"
+                            "txt", "log", "properties" -> "text/plain"
+                            "json" -> "application/json"
+                            "csv" -> "text/csv"
+                            "pdf" -> "application/pdf"
+                            "png", "jpg", "jpeg", "webp" -> "image/*"
+                            else -> "text/plain"
+                        }
+                        val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(uri, mimeType)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        val chooserIntent = Intent.createChooser(viewIntent, "فتح باستخدام")
+                        chooserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(chooserIntent)
+                    } else {
+                        Toast.makeText(context, "الملف غير موجود في القرص", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "فشل فتح الملف: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+
+            val shareFile = {
+                try {
+                    val entity = editingFileEntity!!
+                    val file = File(entity.fullPath)
+                    if (file.exists()) {
+                        file.writeText(editingFileContent)
+                        val authority = "${context.packageName}.fileprovider"
+                        val uri = FileProvider.getUriForFile(context, authority, file)
+                        val mimeType = when (file.extension.lowercase(Locale.ROOT)) {
+                            "html", "htm" -> "text/html"
+                            "txt", "log", "properties" -> "text/plain"
+                            "json" -> "application/json"
+                            "csv" -> "text/csv"
+                            "pdf" -> "application/pdf"
+                            else -> "text/plain"
+                        }
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = mimeType
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        val chooserIntent = Intent.createChooser(shareIntent, "مشاركة الملف")
+                        chooserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(chooserIntent)
+                    } else {
+                        Toast.makeText(context, "الملف غير موجود لمشاركته", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "فشل مشاركة الملف: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+
+            val copyToClipboard = {
+                try {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("File Content", editingFileContent))
+                    Toast.makeText(context, "📋 تم نسخ كامل محتوى الملف للحافظة!", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(context, "فشل نسخ المحتوى: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(CardSlateBg, RoundedCornerShape(24.dp))
                     .border(1.dp, GlassBorder, RoundedCornerShape(24.dp))
-                    .padding(20.dp)
+                    .padding(16.dp)
             ) {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "📁 مستكشف ومعاين الملفات",
+                            color = MetallicGold,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Box(
+                            modifier = Modifier
+                                .background(GoldGlassBg, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = editingFileEntity?.path?.substringAfterLast('.') ?: "ملف",
+                                color = MetallicGold,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    
                     Text(
-                        text = "محرر الملفات: ${editingFileEntity?.path}",
-                        color = MetallicGold,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "المسار الكامل: ${editingFileEntity?.fullPath}",
+                        text = "المسار: ${editingFileEntity?.fullPath}",
                         color = TextMuted,
                         fontSize = 9.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     
-                    Spacer(modifier = Modifier.height(10.dp))
+                    // Info Statistics row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val sizeKb = remember(editingFileContent) { 
+                            try {
+                                String.format(Locale.getDefault(), "%.2f KB", editingFileContent.toByteArray().size / 1024f)
+                            } catch (e: Exception) {
+                                "0 KB"
+                            }
+                        }
+                        listOf(
+                            "الأسطر: $linesCount",
+                            "الكلمات: $wordsCount",
+                            "الحروف: $charsCount",
+                            "الحجم: $sizeKb"
+                        ).forEach { stat ->
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .background(GlassWhite.copy(alpha = 0.05f), RoundedCornerShape(6.dp))
+                                    .border(0.5.dp, GlassBorder.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
+                                    .padding(vertical = 4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(stat, color = TextSilver, fontSize = 8.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
 
+                    // Inline Search Bar
                     OutlinedTextField(
-                        value = editingFileContent,
-                        onValueChange = { editingFileContent = it },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp),
-                        textStyle = TextStyle(color = TextSilver, fontFamily = FontFamily.Monospace, fontSize = 12.sp),
+                        value = fileSearchQuery,
+                        onValueChange = { fileSearchQuery = it },
+                        placeholder = { Text("بحث سريع داخل محتوى الملف...", color = TextMuted, fontSize = 10.sp) },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MetallicGold, modifier = Modifier.size(14.dp)) },
+                        trailingIcon = {
+                            if (fileSearchQuery.isNotEmpty()) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.padding(end = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "$searchMatchesCount مطابقة",
+                                        color = MetallicGold,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    IconButton(onClick = { fileSearchQuery = "" }, modifier = Modifier.size(16.dp)) {
+                                        Icon(Icons.Default.Clear, contentDescription = "Clear", tint = TextMuted, modifier = Modifier.size(12.dp))
+                                    }
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(42.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = MetallicGold,
                             unfocusedBorderColor = GlassBorder,
                             focusedContainerColor = GlassBlack,
                             unfocusedContainerColor = GlassBlack
-                        )
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        textStyle = TextStyle(fontSize = 11.sp),
+                        singleLine = true
                     )
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    // Text Editor Area
+                    OutlinedTextField(
+                        value = editingFileContent,
+                        onValueChange = { editingFileContent = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(240.dp),
+                        textStyle = TextStyle(color = TextSilver, fontFamily = FontFamily.Monospace, fontSize = 11.sp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MetallicGold,
+                            unfocusedBorderColor = GlassBorder,
+                            focusedContainerColor = GlassBlack,
+                            unfocusedContainerColor = GlassBlack
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
 
+                    // Helper Action buttons (Copy, Share, Open External)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Button(
+                            onClick = copyToClipboard,
+                            colors = ButtonDefaults.buttonColors(containerColor = CardSlateBg.copy(alpha = 0.8f), contentColor = TextSilver),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f).height(30.dp),
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(Icons.Default.Share, contentDescription = null, tint = MetallicGold, modifier = Modifier.size(12.dp))
+                                Text("نسخ المحتوى", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Button(
+                            onClick = shareFile,
+                            colors = ButtonDefaults.buttonColors(containerColor = CardSlateBg.copy(alpha = 0.8f), contentColor = TextSilver),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f).height(30.dp),
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(Icons.Default.Send, contentDescription = null, tint = MetallicGold, modifier = Modifier.size(12.dp))
+                                Text("مشاركة الملف", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Button(
+                            onClick = openFileInExternalApp,
+                            colors = ButtonDefaults.buttonColors(containerColor = CardSlateBg.copy(alpha = 0.8f), contentColor = TextSilver),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f).height(30.dp),
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MetallicGold, modifier = Modifier.size(12.dp))
+                                Text("فتح ببرنامج خارجي", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Bottom actions row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         TextButton(
                             onClick = {
@@ -2058,16 +3957,16 @@ fun MonitorScreen(viewModel: MainViewModel) {
                                         viewModel.clearCreatedFilesList() // refresh
                                     }
                                     showFileEditorDialog = false
-                                    Toast.makeText(context, "تم حذف الملف الحقيقي بنجاح", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "تم حذف الملف بنجاح من القرص واللوحة", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         ) {
-                            Text("حذف الملف", color = DangerRed, fontWeight = FontWeight.Bold)
+                            Text("حذف الملف", color = DangerRed, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                         }
 
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(onClick = { showFileEditorDialog = false }) {
-                                Text("إلغاء", color = TextGray)
+                                Text("إلغاء", color = TextGray, fontSize = 11.sp)
                             }
 
                             Button(
@@ -2083,9 +3982,10 @@ fun MonitorScreen(viewModel: MainViewModel) {
                                     }
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = MetallicGold, contentColor = SlateBg),
-                                shape = RoundedCornerShape(12.dp)
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.height(34.dp)
                             ) {
-                                Text("حفظ", fontWeight = FontWeight.Bold)
+                                Text("حفظ التعديلات", fontWeight = FontWeight.Bold, fontSize = 11.sp)
                             }
                         }
                     }
@@ -4549,8 +6449,8 @@ fun SettingsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(120.dp)
-                            .background(Color(0xFF0F172A), RoundedCornerShape(8.dp))
-                            .border(1.dp, Color(0xFF334155), RoundedCornerShape(8.dp))
+                            .background(GlassWhiteMedium, RoundedCornerShape(8.dp))
+                            .border(1.dp, GlassBorder, RoundedCornerShape(8.dp))
                             .verticalScroll(rememberScrollState())
                             .padding(10.dp)
                     ) {
@@ -5479,7 +7379,7 @@ fun PermissionsDashboardDialog(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 4.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1D3A)),
+                                colors = CardDefaults.cardColors(containerColor = CardSlateBg),
                                 shape = RoundedCornerShape(12.dp),
                                 border = BorderStroke(1.2.dp, Brush.linearGradient(listOf(MetallicGold, BrightGold)))
                             ) {
@@ -5658,5 +7558,48 @@ fun PermissionItemCard(
             }
         }
     }
+}
+
+fun findExistingFilePath(context: Context, text: String): String? {
+    try {
+        val currentProjDir = com.example.engine.ProjectContextManager.getCurrentProjectDir(context)
+        val baseDir = com.example.engine.ProjectContextManager.getBaseDir(context)
+
+        // 1. Look for absolute paths matching general patterns starting with /
+        val absRegex = Regex("""(/[a-zA-Z0-9_.\-]+)+?\.[a-zA-Z0-9]+""")
+        val matches = absRegex.findAll(text)
+        for (m in matches) {
+            val path = m.value
+            val file = File(path)
+            if (file.exists() && file.isFile) return file.absolutePath
+        }
+
+        // 2. Split words to find matches
+        text.split(Regex("[\\s\"'\\n]")).forEach { word ->
+            val clean = word.trim().trim('"', '\'', ',', '[', ']', '(', ')')
+            if (clean.isNotBlank() && clean.contains(".")) {
+                // Check if it's a direct absolute path
+                val fileAbs = File(clean)
+                if (fileAbs.exists() && fileAbs.isFile) {
+                    return fileAbs.absolutePath
+                }
+
+                // Check relative to project dir
+                val fileProj = File(currentProjDir, clean)
+                if (fileProj.exists() && fileProj.isFile) {
+                    return fileProj.absolutePath
+                }
+
+                // Check relative to base dir
+                val fileBase = File(baseDir, clean)
+                if (fileBase.exists() && fileBase.isFile) {
+                    return fileBase.absolutePath
+                }
+            }
+        }
+    } catch (e: Exception) {
+        // Safe check
+    }
+    return null
 }
 

@@ -1,8 +1,10 @@
 package com.example
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,6 +16,7 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -33,133 +36,14 @@ fun AIPromptHubScreen(
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("@builder", "@executor", "@treedoc", "القوالب")
-
-    // Dynamic data matching the requirements
-    val titleText = when (selectedTab) {
-        0 -> "كيف تطلب من المساعد الذكي استخدام @builder؟"
-        1 -> "كيف تطلب من المساعد الذكي إصدار أوامر @executor؟"
-        2 -> "كيف تطلب من المساعد الذكي استعراض بنية المجلدات @treedoc؟"
-        else -> "كيف تطلب من المساعد الذكي تصميم قوالب المشاريع؟"
-    }
-
-    val explanationText = when (selectedTab) {
-        0 -> "يستخدم وسم @builder لإنشاء الملفات البرمجية أو تحديثها وتعديلها تلقائياً بالكامل في المجلد النشط عبر المنصة."
-        1 -> "يسمح وسم @executor للمساعد الخارجي بإصدار أوامر إدارة ملفات مباشرة، مثل إنشاء المجلدات، النقل، الحذف، والنسخ الاحتياطي."
-        2 -> "يساعد أمر @treedoc المساعد في طلب تقارير شجرية أو مسح هيكلي للتحقق من سلامة بناء الملفات والمجلدات الحالية مجدولاً."
-        else -> "يوضح هذا القسم الهيكل البرمجي المعتمد لقوالب المشاريع بصيغة JSON لتصميم قوالب كاملة للمشروع وبنائها فوراً."
-    }
-
-    val systemPromptText = when (selectedTab) {
-        0 -> """
-            أنت مساعد برمجيات ذكي وخبير في المنصة الذكية. يمكنك إنشاء ملفات جديدة داخل المشروع النشط أو تحديثها برمجياً بنجاح عبر صياغة المحتويات وتمريرها داخل كتل وسم @builder المعياري.
-            
-            يتم فحص وقراءة كتل @builder تلقائياً عند حفظ النص أو التقاطه بالحافظة.
-            تنسيق وسم البناء المعتمد للملفات يجب أن يكون كالتالي:
-            
-            [بادئة التعليق لكل لغة] @builder:file اسم_الملف_مع_المسار_النسبي.الامتداد
-            [اكتب محتوى الملف الكامل أو المحدث هنا برصانة وتفصيل]
-            [بادئة التعليق لكل لغة] @builder:end
-            
-            مثال على تعليق لغة بايثون:
-            # @builder:file main.py
-            # print("hello world")
-            # @builder:end
-            
-            تأكد من تطابق بادئات التعليق حسب لغة الملف، وكتابة الكود كاملاً دون حذف أو اختصار لتجنب المشاكل في البناء.
-        """.trimIndent()
-
-        1 -> """
-            أنت منفذ أوامر معتمد ذو صلاحيات متقدمة داخل سياق المنصة الذكية. يمكنك تفعيل وإدارة الملفات والمجلدات عبر تمرير الأوامر الهيكلية برفق باستخدام بادئة @executor في سطر مستقل تماماً.
-            
-            الأوامر المدعومة من المحرك المنفذ هي:
-            - @executor:mkdir --path=اسم_المجلد : لإنشاء مجلد فرعي جديد.
-            - @executor:move --path=الملف_المراد_نقله --dest=المجلد_المستهدف : لنقل الملفات.
-            - @executor:rename --path=المسار_الحالي --newName=الاسم_الجديد : لإعادة مسمى ملف أو مجلد.
-            - @executor:delete --path=المسار_المستهدف : لحذف الملف أو المجلد نهائياً.
-            - @executor:copy-safe --path=المسار_الأصلي --dest=المسار_الجديد : لنسخ ملف بأمان تام.
-            
-            اكتب كل أمر في سطر منفصل مستقل، وتأكد من صحة مسارات الملفات والمجلدات.
-        """.trimIndent()
-
-        2 -> """
-            أنت مرشد ومستطلع هيكل شجرة المشاريع الفني بالمنصة الذكية. يمكنك تتبع وبناء تقرير منظم كشجرة مرئية لكافة الفولدرات والملفات المخزنة في المشروع النشط عبر بادئة @treedoc في سطر مستقل.
-            
-            تنسيقات الأوامر المدعومة:
-            - @treedoc:report [مسار_المجلد] [الصيغة json أو txt أو html] : لإنشاء تقرير هيكلي شامل. (الافتراضي: html)
-            - @treedoc:scan [مسار_المجلد] : لمسح سريع وتتبع المكونات داخلياً.
-            
-            عند صدور هذا الأمر، سيقوم المحرك بنسخ شجرة التقرير الناتجة تلقائياً إلى حافظة المستخدم وتوليد ملف tree_report مناسب في المجلد لإيضاح بنية ومستوى عمق الملفات والمجلدات.
-        """.trimIndent()
-
-        else -> """
-            أنت مهندس تصميم قوالب المشاريع بالمنصة الذكية. يمكنك صياغة وبناء قالب إعداد متكامل بصيغة JSON القياسية ليتم تحليلها وبناؤها فوراً على القرص.
-            البنية المعيارية المدعومة للقالب JSON:
-            {
-              "projectName": "حزمة_إلكترونية_عربية",
-              "template_version": "1.0",
-              "folders": [
-                {
-                  "name": "الاسم العربي للمجلد",
-                  "path": "english_folder_path",
-                  "fileTypes": ["txt", "md"],
-                  "keywords": ["كلمة_دالة1", "مفتاح2"]
-                }
-              ]
-            }
-            
-            تأكد من كتابة JSON صحيح برصانة، وتأطير الأسماء العربية بدقة لتسهيل فرز الملفات وتوجيه الحافة بذكاء.
-        """.trimIndent()
-    }
-
-    val exampleText = when (selectedTab) {
-        0 -> """
-            // @builder:file index.html
-            <!DOCTYPE html>
-            <html>
-            <head><title>المشروع الذكي</title></head>
-            <body><h1>مرحباً بكم في منصة البناء الذهبية!</h1></body>
-            </html>
-            // @builder:end
-        """.trimIndent()
-
-        1 -> """
-            @executor:mkdir --path=تطوير_الواجهات
-            @executor:copy-safe --path=index.html --dest=تطوير_الواجهات/index.html
-        """.trimIndent()
-
-        2 -> """
-            @treedoc:report . html
-        """.trimIndent()
-
-        else -> """
-            {
-              "projectName": "منصة_التعلم_السريع",
-              "template_version": "1.0",
-              "folders": [
-                {
-                  "name": "الدروس العملي",
-                  "path": "practical_labs",
-                  "fileTypes": ["kt", "md"],
-                  "keywords": ["تطبيق", "برمجة", "معمل"]
-                },
-                {
-                  "name": "المفاهيم النظرية",
-                  "path": "theoretical_notes",
-                  "fileTypes": ["txt"],
-                  "keywords": ["مفهوم", "تعريف", "شرح"]
-                }
-              ]
-            }
-        """.trimIndent()
-    }
+    val tabs = listOf("دليل البدء", "@builder", "@executor", "@treedoc", "القوالب", "نصائح للمساعد")
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        "مركز تعليمات المساعدين الذكي",
+                        "🤖 مركز توجيه المساعدات الذكية",
                         color = BrightGold,
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp
@@ -184,16 +68,19 @@ fun AIPromptHubScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Elegant Tab Row
-            TabRow(
+            // Elegant Scrollable Tab Row
+            ScrollableTabRow(
                 selectedTabIndex = selectedTab,
                 containerColor = SlateBg,
                 contentColor = BrightGold,
+                edgePadding = 12.dp,
                 indicator = { tabPositions ->
-                    TabRowDefaults.Indicator(
-                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                        color = BrightGold
-                    )
+                    if (selectedTab < tabPositions.size) {
+                        TabRowDefaults.Indicator(
+                            modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                            color = BrightGold
+                        )
+                    }
                 }
             ) {
                 tabs.forEachIndexed { index, title ->
@@ -217,163 +104,1006 @@ fun AIPromptHubScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Header of active item info
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = CardSlateBg),
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorder)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null,
-                                tint = BrightGold,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Column {
-                                Text(
-                                    text = titleText,
-                                    color = BrightGold,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.5.sp
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = explanationText,
-                                    color = TextSilver,
-                                    fontSize = 11.sp,
-                                    lineHeight = 15.sp
-                                )
-                            }
-                        }
-                    }
+                when (selectedTab) {
+                    0 -> showQuickStartGuide(context, clipboardManager)
+                    1 -> showBuilderGuide(context, clipboardManager)
+                    2 -> showExecutorGuide(context, clipboardManager)
+                    3 -> showTreeDocGuide(context, clipboardManager)
+                    4 -> showTemplatesGuide(context, clipboardManager)
+                    5 -> showSystemPromptsGuide(context, clipboardManager)
                 }
+            }
+        }
+    }
+}
 
-                // Title Section for System Prompt
-                item {
+// ==========================================
+// 1. QUICK START GUIDE TAB
+// ==========================================
+private fun androidx.compose.foundation.lazy.LazyListScope.showQuickStartGuide(
+    context: android.content.Context,
+    clipboardManager: androidx.compose.ui.platform.ClipboardManager
+) {
+    item {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = CardSlateBg),
+            border = BorderStroke(1.dp, GlassBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("📖", fontSize = 24.sp)
                     Text(
-                        text = "📜 نص التلقين البرمجي المعتمد (System Prompt):",
+                        text = "دليل البدء السريع لـ رفيق الذكاء الاصطناعي",
                         color = BrightGold,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 12.5.sp
+                        fontSize = 14.sp
                     )
                 }
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "تطبيق \"المنصة الذهبية\" هو رفيقك الذكي الاستثنائي. يتيح لك تحويل أي نص، كود، أو تعليمات تنسخها من أي مساعد خارجي (مثل ChatGPT أو DeepSeek أو Gemini) إلى ملفات حقيقية ومجلدات وتقارير شجرية تفاعلية على هاتفك، دون مغادرة تطبيق المحادثة.",
+                    color = TextSilver,
+                    fontSize = 11.5.sp,
+                    lineHeight = 16.5.sp
+                )
+            }
+        }
+    }
 
-                // Read-only prompt text block
-                item {
-                    OutlinedTextField(
-                        value = systemPromptText,
-                        onValueChange = {},
-                        readOnly = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(240.dp)
-                            .testTag("hub_system_prompt_area"),
-                        textStyle = TextStyle(
-                            color = TextSilver,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
-                            lineHeight = 15.sp
-                        ),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = CardSlateBg,
-                            unfocusedContainerColor = CardSlateBg,
-                            focusedBorderColor = MetallicGold,
-                            unfocusedBorderColor = GlassBorder
-                        ),
-                        shape = RoundedCornerShape(10.dp)
-                    )
+    item {
+        Text(
+            text = "⚡ كيف تبدأ في 3 خطوات بسيطة:",
+            color = BrightGold,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp
+        )
+    }
+
+    item {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            StepItem(
+                number = "1",
+                title = "انسخ النص أو الكود الذكي",
+                description = "اطلب من المساعد توليد كود أو مجلدات مسبوقة بـ @builder أو @executor، ثم قم بنسخها بالكامل إلى حافظة هاتفك."
+            )
+            StepItem(
+                number = "2",
+                title = "الالتقاط التلقائي والذكي",
+                description = "بمجرد النسخ، ستقوم المنصة الذهبية بالتقاط النص عبر الخلفية أو الكرة العائمة (Golden Bubble) أو لوحة مفاتيح IME مدمجة."
+            )
+            StepItem(
+                number = "3",
+                title = "التنفيذ والمعاينة الفورية",
+                description = "يتم فوراً بناء الملفات أو تشغيل الأوامر في مجلد المشروع، ويمكنك فتحها، تعديلها، أو معاينتها بكبسة زر واحدة من السجلات!"
+            )
+        }
+    }
+
+    item {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0x153B82F6)),
+            border = BorderStroke(1.dp, Color(0x303B82F6)),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Text(
+                    text = "💡 نصيحة احترافية للسرعة الكلية:",
+                    color = Color(0xFF60A5FA),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "قم بتفعيل \"الكرة العائمة\" من القائمة الرئيسية، لتتمكن من مراقبة البناء وتجربة الأكواد بشكل فوري ودون الحاجة للتنقل بين التطبيقات!",
+                    color = TextSilver,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+    }
+}
+
+// ==========================================
+// 2. @BUILDER GUIDE TAB
+// ==========================================
+private fun androidx.compose.foundation.lazy.LazyListScope.showBuilderGuide(
+    context: android.content.Context,
+    clipboardManager: androidx.compose.ui.platform.ClipboardManager
+) {
+    item {
+        GuideHeaderCard(
+            title = "أداة البناء @builder",
+            description = "يستخدم وسم @builder لإنشاء الملفات البرمجية أو تحديثها وتعديلها تلقائياً بالكامل في المجلد النشط بمجرد نسخ الكود."
+        )
+    }
+
+    item {
+        Text(
+            text = "✍️ نحو التوجيه وصياغة الوسم (Syntax):",
+            color = BrightGold,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp
+        )
+    }
+
+    item {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF111122)),
+            border = BorderStroke(1.dp, GlassBorder)
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text(
+                    text = "[تعليق_اللغة] @builder:file [اسم_الملف]\n[كود البرنامج كاملاً دون اختصار]\n[تعليق_اللغة] @builder:end",
+                    color = BrightGold,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+    }
+
+    item {
+        Text(
+            text = "📋 أمثلة تطبيقية متدرجة المستويات:",
+            color = BrightGold,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp
+        )
+    }
+
+    item {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(text = "🟢 مبتدئ: إنشاء ملف نصي بسيط", color = EmeraldGlow, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+            val beginnerCode = """
+                // @builder:file info.txt
+                أهلاً بك في تطبيق المنصة الذهبية.
+                تم إنشاء هذا الملف تلقائياً وبنجاح تام!
+                // @builder:end
+            """.trimIndent()
+            CodeBlock(beginnerCode) {
+                clipboardManager.setText(AnnotatedString(beginnerCode))
+                Toast.makeText(context, "تم نسخ المثال المبتدئ للحافظة!", Toast.LENGTH_SHORT).show()
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(text = "🟡 متوسط: إنشاء وتحديث أكواد لغات الويب", color = BrightGold, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+            val mediumCode = """
+                <!-- @builder:file index.html -->
+                <!DOCTYPE html>
+                <html lang="ar" dir="rtl">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>المنصة التعليمية</title>
+                    <style>
+                        body { background: #0F172A; color: #F8FAFC; text-align: center; padding-top: 50px; }
+                        h1 { color: #F59E0B; }
+                    </style>
+                </head>
+                <body>
+                    <h1>مرحباً بك في صفحتك الخاصة</h1>
+                    <p>هذه الصفحة تم بناؤها بالكامل برفق عبر هاتفك المحمول!</p>
+                </body>
+                </html>
+                <!-- @builder:end -->
+            """.trimIndent()
+            CodeBlock(mediumCode) {
+                clipboardManager.setText(AnnotatedString(mediumCode))
+                Toast.makeText(context, "تم نسخ المثال المتوسط للحافظة!", Toast.LENGTH_SHORT).show()
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(text = "🔴 متقدم: كود بايثون متقدم مع المعالجة", color = DangerRed, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+            val advancedCode = """
+                # @builder:file data_processor.py
+                import json
+
+                def analyze_data():
+                    data = {"status": "success", "platform": "Golden Platform", "version": 2.0}
+                    print("جاري معالجة وتحليل البيانات...")
+                    print(f"اسم المنصة: {data['platform']}")
+                    return json.dumps(data, indent=4)
+
+                if __name__ == "__main__":
+                    result = analyze_data()
+                    print(result)
+                # @builder:end
+            """.trimIndent()
+            CodeBlock(advancedCode) {
+                clipboardManager.setText(AnnotatedString(advancedCode))
+                Toast.makeText(context, "تم نسخ المثال المتقدم للحافظة!", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    item {
+        Text(
+            text = "🎬 سيناريوهات واقعية تفاعلية:",
+            color = BrightGold,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp
+        )
+    }
+
+    item {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            ExpandableCard(title = "👨‍🏫 سيناريو المعلم: إنشاء صفحة درس تفاعلية") {
+                Text(
+                    text = "مثال: عندما تريد إنشاء درس لطلابك حول الجدول الدوري، يمكنك أن تطلب من الذكاء الاصطناعي:\n" +
+                            "\"قم بإنشاء صفحة ويب HTML تفاعلية تشرح الجدول الدوري مستخدماً كتل @builder وبخلفية داكنة أنيقة وملونة.\"\n\n" +
+                            "سيقوم المساعد بإرسال الكود مغلفاً بوسم @builder، وعند نسخك للمحادثة، سيقوم تطبيقنا ببناء الملف فورا لتتمكن من عرضه للطلاب عبر زر \"👁️ معاينة\" بالفقاعة!",
+                    color = TextSilver,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
+            }
+
+            ExpandableCard(title = "💻 سيناريو المطور: مشاركة الأكواد وتجربتها") {
+                Text(
+                    text = "مثال: بدلاً من نقل الكود يدوياً وسطر بسطر، اطلب من المساعد توليد ملفات الأكواد مغلفة بوسوم البناء @builder.\n" +
+                            "بمجرد ضغطة واحدة على زر \"نسخ\" في ChatGPT، سيكتشف تطبيقنا الملفات ويبنيها في مجلد مشروعك في أقل من ثانية، لتجد الأكواد مرتبة ومحدثة على الفور!",
+                    color = TextSilver,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+    }
+
+    item {
+        Text(
+            text = "⚠️ أخطاء شائعة جداً وكيف تتجنبها:",
+            color = DangerRed,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp
+        )
+    }
+
+    item {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = CardSlateBg),
+            border = BorderStroke(1.dp, Color(0x30EF4444)),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                BulletErrorItem(
+                    error = "نسيان وسم الإغلاق @builder:end",
+                    fix = "تأكد دائماً أن ينتهي كود الملف بسطر إغلاق مستقل تماماً يحتوي على @builder:end لتتمكن المنصة من حفظ الملف بشكل سليم."
+                )
+                BulletErrorItem(
+                    error = "إرسال أكواد مبتورة أو تعليقات استبدال",
+                    fix = "الذكاء الاصطناعي قد يكتب أحياناً '// ... باقي الأكواد هنا ...'. اطلب منه دائماً إرسال الكود كاملاً لعدم حذف الأكواد القديمة بالخطأ."
+                )
+            }
+        }
+    }
+}
+
+// ==========================================
+// 3. @EXECUTOR GUIDE TAB
+// ==========================================
+private fun androidx.compose.foundation.lazy.LazyListScope.showExecutorGuide(
+    context: android.content.Context,
+    clipboardManager: androidx.compose.ui.platform.ClipboardManager
+) {
+    item {
+        GuideHeaderCard(
+            title = "محرك الأوامر @executor",
+            description = "يسمح وسم @executor للمساعد الخارجي بإصدار أوامر إدارة ملفات مباشرة ومنظمة على هاتفك، لتنظيم المشاريع بضغطة واحدة."
+        )
+    }
+
+    item {
+        Text(
+            text = "✍️ نحو التوجيه وصياغة الأمر (Syntax):",
+            color = BrightGold,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp
+        )
+    }
+
+    item {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF111122)),
+            border = BorderStroke(1.dp, GlassBorder)
+        ) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "الطريقة الأولى (الأوامر السريعة المباشرة):",
+                    color = TextMuted,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "@executor:[اسم_الأمر] --param1=value1 --param2=value2",
+                    color = BrightGold,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "الطريقة الثانية (استخدام بنية JSON للتمرير المعقد):",
+                    color = TextMuted,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "@executor:[اسم_الأمر]\n{\n  \"param1\": \"value1\",\n  \"param2\": \"value2\"\n}",
+                    color = BrightGold,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp
+                )
+            }
+        }
+    }
+
+    item {
+        Text(
+            text = "📋 قائمة الـ 23 أمراً المعتمدة للمنفذ الذكي:",
+            color = BrightGold,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp
+        )
+    }
+
+    // Comprehensive list of all 23 commands with descriptions
+    item {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = CardSlateBg),
+            border = BorderStroke(1.dp, GlassBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                CommandListItem(num = "1", name = "scan", desc = "يفحص ويحلل محتويات المجلد المحدد لتتبع أي تعديلات طرأت.")
+                CommandListItem(num = "2", name = "list", desc = "يعرض قائمة تفصيلية بالملفات والمجلدات مع الحجم وتاريخ التعديل.")
+                CommandListItem(num = "3", name = "filter", desc = "فرز وتصفية الملفات بناءً على الامتداد أو الحجم أو تاريخ التعديل.")
+                CommandListItem(num = "4", name = "rename", desc = "يغير اسم ملف أو مجلد معين بأمان تام ودون إتلاف محتواه.")
+                CommandListItem(num = "5", name = "move", desc = "ينقل ملفاً أو مجلداً من مساره الحالي إلى أي مكان في المشروع.")
+                CommandListItem(num = "6", name = "copy-safe", desc = "ينسخ ملفاً لمسار جديد مع حماية الملف الأصلي وتجنب الاستبدال المفاجئ.")
+                CommandListItem(num = "7", name = "delete", desc = "يحذف ملفاً أو مجلداً نهائياً من القرص.")
+                CommandListItem(num = "8", name = "duplicates", desc = "يبحث عن الملفات المكررة في مشروعك ويقترح التخلص منها لتوفير مساحة.")
+                CommandListItem(num = "9", name = "project", desc = "يدير شؤون المشروع الحالي، كلمات الدلالة، والمجلدات الفعالة.")
+                CommandListItem(num = "10", name = "mkdir", desc = "ينشئ مجلداً (Directory) فرعياً جديداً بالمسار المطلوب.")
+                CommandListItem(num = "11", name = "file", desc = "عملية سريعة ومبسطة للتعامل مع خصائص الملفات وإنشائها.")
+                CommandListItem(num = "12", name = "template", desc = "يطبق قالباً تفاعلياً للمشروع بناءً على ملف تهيئة JSON معتمد.")
+                CommandListItem(num = "13", name = "extract-title", desc = "يستخرج العناوين والبيانات الوصفية الأساسية من ملفات HTML والنصوص.")
+                CommandListItem(num = "14", name = "read-metadata", desc = "يقرأ التفاصيل الفنية والخصائص الخفية لملفات الكود والمستندات.")
+                CommandListItem(num = "15", name = "report", desc = "يولد تقريراً تجميعياً شاملاً حول أحجام وتوزيع الملفات بالمشروع.")
+                CommandListItem(num = "16", name = "chart", desc = "يرسم إحصائيات بيانية لنسب استخدام الامتدادات والأحجام.")
+                CommandListItem(num = "17", name = "export", desc = "يصدر الملفات والمشروع الحالي في ملف ZIP مضغوط جاهز للمشاركة.")
+                CommandListItem(num = "18", name = "open", desc = "يفتح ملفاً محدداً بالمعاين الداخلي للتطبيق أو عبر تطبيق خارجي مناسب.")
+                CommandListItem(num = "19", name = "clipboard", desc = "يقوم بحفظ وإخراج محتويات الحافظة مباشرة لملف مرتب.")
+                CommandListItem(num = "20", name = "notify", desc = "يرسل إشعاراً للنظام لتنبيه المستخدم باكتمال العمليات الخلفية.")
+                CommandListItem(num = "21", name = "preview", desc = "يفتح واجهة معاينة تفاعلية فورية لصفحات HTML أو المستندات.")
+                CommandListItem(num = "22", name = "ai", desc = "يفعل الذكاء الاصطناعي الداخلي لإعادة الصياغة أو تلخيص ملفات معينة.")
+                CommandListItem(num = "23", name = "selftest", desc = "يقوم بعمل فحص ذاتي سريع للمنصة والأدوات للتأكد من جاهزيتها.")
+            }
+        }
+    }
+
+    item {
+        Text(
+            text = "🎬 سيناريوهات تنظيمية واقعية للمستخدم:",
+            color = BrightGold,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp
+        )
+    }
+
+    item {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            ExpandableCard(title = "🧹 سيناريو الترتيب: فرز وتنظيف الملفات المبعثرة") {
+                Text(
+                    text = "مثال: عندما يتراكم لديك ملفات مبعثرة، يمكنك نسخ هذا الأمر لإرشاد التطبيق لإنشاء مجلد خاص بالأنماط ونقل الملفات إليه فوراً:\n\n" +
+                            "@executor:mkdir --path=css_styles\n" +
+                            "@executor:move\n" +
+                            "{\n" +
+                            "  \"path\": \"style.css\",\n" +
+                            "  \"dest\": \"css_styles/style.css\"\n" +
+                            "}",
+                    color = TextSilver,
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    lineHeight = 15.sp
+                )
+            }
+
+            ExpandableCard(title = "📦 سيناريو الأرشفة: تصدير مشروعك كملف ZIP") {
+                Text(
+                    text = "مثال: عندما تكمل عملك على موقعك وتريد مشاركته كملف مضغوط، يمكنك تنفيذ هذا الأمر البسيط:\n\n" +
+                            "@executor:export --format=zip\n\n" +
+                            "سيقوم التطبيق بتجميع كافة الملفات والمجلدات وتصديرها كملف ZIP متاح في مدير الملفات لتشاركه مع أصدقائك أو معلمك بسهولة تامة!",
+                    color = TextSilver,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+    }
+}
+
+// ==========================================
+// 4. @TREEDOC GUIDE TAB
+// ==========================================
+private fun androidx.compose.foundation.lazy.LazyListScope.showTreeDocGuide(
+    context: android.content.Context,
+    clipboardManager: androidx.compose.ui.platform.ClipboardManager
+) {
+    item {
+        GuideHeaderCard(
+            title = "أداة التقارير الشجرية @treedoc",
+            description = "يستخدم أمر @treedoc لإنشاء رسم تخطيطي شجري يوضح بنية وعلاقات الملفات والمجلدات في مشروعك بكفاءة عالية."
+        )
+    }
+
+    item {
+        Text(
+            text = "✍️ صياغة التوجيه (Syntax):",
+            color = BrightGold,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp
+        )
+    }
+
+    item {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF111122)),
+            border = BorderStroke(1.dp, GlassBorder)
+        ) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "@treedoc --format=[txt | html | json]",
+                    color = BrightGold,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "الخيارات المتاحة:\n" +
+                            "• txt: رسم شجري نصي بسيط ومريح للعين والنسخ.\n" +
+                            "• html: صفحة تقرير ويب تفاعلية مذهلة تعرض توزيع الأحجام كأشكال بيانية.\n" +
+                            "• json: تمثيل هيكلي خالص يفهمه المساعد البرمجي بدقة تامة.",
+                    color = TextSilver,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+    }
+
+    item {
+        Text(
+            text = "👀 مثال على التقرير الشجري النصي الناتح:",
+            color = BrightGold,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp
+        )
+    }
+
+    item {
+        val treeExample = """
+            📁 المشروع الحالي: منصة_التعلم
+            ├── 📁 lessons (مجلد الدروس)
+            │   ├── 📄 chemistry.html (34 KB)
+            │   └── 📄 physics.html (41 KB)
+            ├── 📁 css (مجلد الأنماط)
+            │   └── 📄 main.css (12 KB)
+            └── 📄 index.html (8 KB)
+        """.trimIndent()
+        CodeBlock(treeExample) {
+            clipboardManager.setText(AnnotatedString(treeExample))
+            Toast.makeText(context, "تم نسخ رسم الشجرة التوضيحي!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    item {
+        Text(
+            text = "🎬 سيناريوهات عملية مفيدة جداً:",
+            color = BrightGold,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp
+        )
+    }
+
+    item {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            ExpandableCard(title = "🧠 إعطاء المساعد نظرة كاملة على مشروعك") {
+                Text(
+                    text = "عندما تبدأ محادثة جديدة وتريد من المساعد أن يفهم أين وصلت وكيف تبدو بنية ملفاتك الحالية، انسخ أمر @treedoc --format=txt، وبمجرد تنفيذه، قم بنسخ النتيجة للمساعد الذكي ليفهم هيكلة مشروعك ويقدم لك توجيهات مثالية!",
+                    color = TextSilver,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
+            }
+
+            ExpandableCard(title = "📊 توليد صفحة ويب تبرز توزيع المساحات") {
+                Text(
+                    text = "انسخ أمر @treedoc --format=html، وسيولد التطبيق تلقائياً ملف ويب تفاعلي وجذاب يحتوي على رسومات دائرية توضح أكبر الملفات استهلاكاً للمساحة في مشروعك مع أزرار سريعة لتصفحها ومعاينتها بروعة!",
+                    color = TextSilver,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+    }
+}
+
+// ==========================================
+// 5. TEMPLATES GUIDE TAB
+// ==========================================
+private fun androidx.compose.foundation.lazy.LazyListScope.showTemplatesGuide(
+    context: android.content.Context,
+    clipboardManager: androidx.compose.ui.platform.ClipboardManager
+) {
+    item {
+        GuideHeaderCard(
+            title = "نظام قوالب المشاريع الموحدة",
+            description = "يتيح لك نظام القوالب بناء هياكل مشاريع ومجلدات متكاملة بضغطة واحدة عبر ملف إعداد بسيط بصيغة JSON."
+        )
+    }
+
+    item {
+        Text(
+            text = "✍️ صياغة بنية القالب (JSON Structure):",
+            color = BrightGold,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp
+        )
+    }
+
+    item {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF111122)),
+            border = BorderStroke(1.dp, GlassBorder)
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text(
+                    text = "يجب أن يحتوي كود JSON على:\n" +
+                            "• projectName: الاسم الكلي لمشروعك.\n" +
+                            "• template_version: إصدار التهيئة.\n" +
+                            "• folders: مصفوفة تحتوي على المجلدات، مساراتها النسبية، الامتدادات المقبولة فيها، والكلمات الدالة (Keywords) لفرز وحفظ الملفات الملتقطة تلقائياً بداخلها!",
+                    color = TextSilver,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+    }
+
+    item {
+        Text(
+            text = "📋 مثال متكامل لقالب مشروع جاهز للنسخ والبناء:",
+            color = BrightGold,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp
+        )
+    }
+
+    item {
+        val jsonTemplate = """
+            {
+              "projectName": "منصة_الرياضيات_التفاعلية",
+              "template_version": "2.0",
+              "folders": [
+                {
+                  "name": "الدروس والفيديوهات",
+                  "path": "lessons",
+                  "fileTypes": ["html", "txt"],
+                  "keywords": ["حساب", "جبر", "هندسة"]
+                },
+                {
+                  "name": "الاختبارات والتقييمات",
+                  "path": "quizzes",
+                  "fileTypes": ["json", "xml"],
+                  "keywords": ["سؤال", "درجة", "اختبار"]
+                },
+                {
+                  "name": "الوسائط والصور",
+                  "path": "assets",
+                  "fileTypes": ["png", "jpg", "svg"],
+                  "keywords": ["رسم", "شكل", "توضيح"]
                 }
+              ]
+            }
+        """.trimIndent()
+        CodeBlock(jsonTemplate) {
+            clipboardManager.setText(AnnotatedString(jsonTemplate))
+            Toast.makeText(context, "تم نسخ قالب التهيئة بنجاح!", Toast.LENGTH_SHORT).show()
+        }
+    }
 
-                // Action Buttons for current tab
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    item {
+        Text(
+            text = "🎬 سيناريو البناء والتصنيف الذاتي:",
+            color = BrightGold,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp
+        )
+    }
+
+    item {
+        ExpandableCard(title = "🏫 سيناريو إنشاء بيئة مقرر دراسي أو تدريبي") {
+            Text(
+                text = "بمجرد نسخ قالب الـ JSON أعلاه، سيقوم التطبيق بتهيئة 3 مجلدات (lessons, quizzes, assets). وفي المستقبل، أي نص تنسخه من المساعد الذكي يحتوي على كلمة \"جبر\" أو \"هندسة\"، سيقوم محرك الالتقاط الذكي بحفظه تلقائياً كملف داخل مجلد \"lessons\" دون أي تدخل منك! هذا هو قمة التنظيم الذاتي للملفات.",
+                color = TextSilver,
+                fontSize = 11.sp,
+                lineHeight = 16.sp
+            )
+        }
+    }
+}
+
+// ==========================================
+// 6. SYSTEM PROMPTS GUIDE TAB (نصائح للمساعد)
+// ==========================================
+private fun androidx.compose.foundation.lazy.LazyListScope.showSystemPromptsGuide(
+    context: android.content.Context,
+    clipboardManager: androidx.compose.ui.platform.ClipboardManager
+) {
+    item {
+        GuideHeaderCard(
+            title = "📜 التلقين البرمجي للمساعدين (System Prompts)",
+            description = "انسخ النص التلقيني المعتمد ومرره للمساعد في بداية المحادثة، ليعرف كيف يتفاعل مع هاتفك ويولد لك ملفات وأوامر جاهزة للتنفيذ التلقائي."
+        )
+    }
+
+    item {
+        Text(
+            text = "🌍 النص التلقيني العام (لأي مساعد ذكي):",
+            color = BrightGold,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp
+        )
+    }
+
+    val generalPrompt = """
+        أنت مساعد برمجي وتدريسي ذكي تخدم مستخدم تطبيق "المنصة الذهبية".
+        المستخدم يعمل على بيئة هاتف ذكي، والتطبيق يراقب الحافظة والملفات.
+        مهمتك هي صياغة الملفات البرمجية والمستندات بأسلوب منظم باستخدام وسوم البناء والتحكم المحددة للتطبيق:
+        
+        1. لإنشاء أو تعديل أي ملف، يجب تغليفه بالكامل هكذا:
+        // @builder:file [المسار النسبي للملف]
+        [محتوى الملف الكامل دون اختصارات]
+        // @builder:end
+        
+        2. لإصدار أوامر تنظيم ملفات، اكتب في سطر منفصل مستقل:
+        @executor:[الأمر] --[المعامل]=[القيمة]
+        أو كبنية JSON مثل:
+        @executor:move
+        {"path": "source.txt", "dest": "dest.txt"}
+        
+        الأوامر المدعومة تشمل: scan, list, filter, rename, move, copy-safe, delete, duplicates, project, mkdir, file, template, extract-title, read-metadata, report, chart, export, open, clipboard, notify, preview, ai, selftest.
+        
+        3. لطلب بنية وتخطيط المجلدات، استخدم:
+        @treedoc --format=[txt أو html أو json]
+        
+        اكتب مخرجاتك بوضوح وتجنب الاختصارات لتسهيل المعالجة البرمجية التلقائية.
+    """.trimIndent()
+
+    item {
+        CodeBlock(generalPrompt) {
+            clipboardManager.setText(AnnotatedString(generalPrompt))
+            Toast.makeText(context, "تم نسخ التلقين العام بنجاح!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    item {
+        Text(
+            text = "🎯 نصوص تلقينية مخصصة ومحسنة حسب المساعد الذكي:",
+            color = BrightGold,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp
+        )
+    }
+
+    item {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            ExpandableCard(title = "💬 نص تلقين مخصص لـ ChatGPT (محسن ومختصر)") {
+                val chatGptPrompt = "أنت مساعد ChatGPT المتوافق مع المنصة الذهبية. يرجى توليد ردودك البرمجية والتعليمية مباشرة داخل كتل @builder:file و @builder:end، وتجنب المقدمات والشروحات النظرية الطويلة خارج الأكواد لتسهيل عملية النسخ والمعالجة الفورية بكفاءة وسرعة."
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(text = chatGptPrompt, color = TextSilver, fontSize = 11.sp, lineHeight = 16.sp)
+                    Button(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(chatGptPrompt))
+                            Toast.makeText(context, "تم نسخ تلقين ChatGPT!", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MetallicGold, contentColor = SlateBg),
+                        modifier = Modifier.fillMaxWidth().height(36.dp),
+                        shape = RoundedCornerShape(6.dp)
                     ) {
-                        // Copy Instructions
-                        Button(
-                            onClick = {
-                                clipboardManager.setText(AnnotatedString(systemPromptText))
-                                Toast.makeText(context, "📋 تم نسخ التعليمات التوجيهية للحافظة بنجاح!", Toast.LENGTH_SHORT).show()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = MetallicGold, contentColor = SlateBg),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(44.dp)
-                                .testTag("copy_prompt_instructions_btn")
-                        ) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("📋", fontSize = 14.sp)
-                                Text("نسخ التعليمات", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-
-                        // Copy Example
-                        Button(
-                            onClick = {
-                                clipboardManager.setText(AnnotatedString(exampleText))
-                                Toast.makeText(context, "📋 تم نسخ المثال التطبيقي للحافظة بنجاح!", Toast.LENGTH_SHORT).show()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = CardSlateBg, contentColor = BrightGold),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(44.dp)
-                                .border(1.dp, GlassBorder, RoundedCornerShape(8.dp))
-                                .testTag("copy_prompt_example_btn")
-                        ) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("📋", fontSize = 14.sp)
-                                Text("نسخ مثال", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-
-                // Visual Preview of Example
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = "👀 معاينة المثال التطبيقي لـ ${tabs[selectedTab]}:",
-                            color = TextMuted,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp
-                        )
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .border(0.8.dp, GlassBorder, RoundedCornerShape(8.dp)),
-                            colors = CardDefaults.cardColors(containerColor = SlateBg),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text(
-                                text = exampleText,
-                                color = TextSilver,
-                                fontSize = 10.5.sp,
-                                fontFamily = FontFamily.Monospace,
-                                modifier = Modifier.padding(12.dp),
-                                lineHeight = 14.5.sp
-                            )
-                        }
+                        Text("📋 نسخ التلقين المخصص لـ ChatGPT", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
+
+            ExpandableCard(title = "🐳 نص تلقين مخصص لـ DeepSeek (قوة الاستدلال الهيكلي)") {
+                val deepSeekPrompt = "أنت مساعد DeepSeek الخبير في التفكير المنطقي والهيكلة للمنصة الذهبية. وظيفتك تحليل وتصميم المشاريع، واستخدام وسوم البناء @builder لإنشاء الملفات، والاعتماد بكثافة على أوامر @executor لتنظيم وتطهير وترتيب المجلدات وحذف التكرار، وتوفير التوضيحات الشجرية بواسطة @treedoc."
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(text = deepSeekPrompt, color = TextSilver, fontSize = 11.sp, lineHeight = 16.sp)
+                    Button(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(deepSeekPrompt))
+                            Toast.makeText(context, "تم نسخ تلقين DeepSeek!", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MetallicGold, contentColor = SlateBg),
+                        modifier = Modifier.fillMaxWidth().height(36.dp),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text("📋 نسخ التلقين المخصص لـ DeepSeek", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            ExpandableCard(title = "✨ نص تلقين مخصص لـ Gemini (قدرة فهم سياق الدروس الطويل)") {
+                val geminiPrompt = "أنت مساعد Gemini للمنصة الذهبية. نظراً لقدرتك الهائلة في استيعاب سياق الدروس الطويلة والترجمة، قم بصياغة دروس ومقالات تعليمية متكاملة وغنية بالوسائط التوضيحية داخل كتل @builder:file بصيغة HTML لتظهر للطلاب كصفحة ويب منسقة وساحرة بالكامل."
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(text = geminiPrompt, color = TextSilver, fontSize = 11.sp, lineHeight = 16.sp)
+                    Button(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(geminiPrompt))
+                            Toast.makeText(context, "تم نسخ تلقين Gemini!", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MetallicGold, contentColor = SlateBg),
+                        modifier = Modifier.fillMaxWidth().height(36.dp),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text("📋 نسخ التلقين المخصص لـ Gemini", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==========================================
+// REUSABLE HELPER UI COMPONENTS
+// ==========================================
+
+@Composable
+fun GuideHeaderCard(title: String, description: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = CardSlateBg),
+        border = BorderStroke(1.dp, GlassBorder),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Info,
+                contentDescription = null,
+                tint = BrightGold,
+                modifier = Modifier.size(24.dp)
+            )
+            Column {
+                Text(
+                    text = title,
+                    color = BrightGold,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.5.sp
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = description,
+                    color = TextSilver,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun StepItem(number: String, title: String, description: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier
+                .size(26.dp)
+                .background(MetallicGold, RoundedCornerShape(6.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = number,
+                color = SlateBg,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                color = BrightGold,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = description,
+                color = TextSilver,
+                fontSize = 11.sp,
+                lineHeight = 15.sp
+            )
+        }
+    }
+}
+
+@Composable
+fun ExpandableCard(
+    title: String,
+    content: @Composable () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = CardSlateBg),
+        border = BorderStroke(1.dp, GlassBorder),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    color = BrightGold,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = if (expanded) "🔼" else "🔽",
+                    fontSize = 12.sp
+                )
+            }
+            if (expanded) {
+                Spacer(modifier = Modifier.height(8.dp))
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+fun CodeBlock(
+    code: String,
+    onCopy: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(0.8.dp, GlassBorder, RoundedCornerShape(8.dp)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF111122)),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "مثال تطبيقي للنسخ والاستخدام:",
+                    color = TextMuted,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Button(
+                    onClick = onCopy,
+                    colors = ButtonDefaults.buttonColors(containerColor = MetallicGold, contentColor = SlateBg),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier.height(24.dp)
+                ) {
+                    Text("📋 نسخ", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = code,
+                color = TextSilver,
+                fontSize = 10.5.sp,
+                fontFamily = FontFamily.Monospace,
+                lineHeight = 14.5.sp
+            )
+        }
+    }
+}
+
+@Composable
+fun BulletErrorItem(error: String, fix: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text("❌", fontSize = 12.sp)
+        Column {
+            Text(
+                text = error,
+                color = DangerRed,
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.5.sp
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "💡 الحل: $fix",
+                color = TextSilver,
+                fontSize = 10.5.sp,
+                lineHeight = 14.5.sp
+            )
+        }
+    }
+}
+
+@Composable
+fun CommandListItem(num: String, name: String, desc: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .background(Color(0xFF1E293B), RoundedCornerShape(4.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = num,
+                color = BrightGold,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = name,
+                color = BrightGold,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.5.sp
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = desc,
+                color = TextSilver,
+                fontSize = 11.sp,
+                lineHeight = 15.sp
+            )
         }
     }
 }
